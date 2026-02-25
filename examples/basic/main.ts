@@ -18,6 +18,7 @@ const INITIAL_FILTER_MODE = 'client' as const;
 const INITIAL_PAGINATION = { page: 0, pageSize: 500 };
 const INITIAL_FREEZE = { leftCount: 0, rightCount: 0 };
 const INITIAL_HEIGHT: number | 'auto' = 620;
+const INITIAL_HEIGHT_MODE = 'fixed' as const;
 const FOOTER_MODE = 'embedded' as const;
 
 const container = document.getElementById('grid-container');
@@ -41,7 +42,7 @@ const grid = createGrid({
   initialFreeze: INITIAL_FREEZE,
   config: {
     height: typeof INITIAL_HEIGHT === 'number' ? INITIAL_HEIGHT : 620,
-    heightMode: INITIAL_HEIGHT === 'auto' ? 'auto' : 'fixed',
+    heightMode: INITIAL_HEIGHT_MODE,
     rowHeight: 40,
     headerHeight: 44,
     overscanRows: 10,

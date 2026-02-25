@@ -26,6 +26,8 @@ function createMockState(page: number, pageSize: number): GridState {
     filter: { criteria: [], mode: 'client' },
     selection: { selectedIds: new Set(), allSelected: false },
     pagination: { page, pageSize, totalRows: 0 },
+    freeze: { leftCount: 0, rightCount: 0 },
+    grouping: { columnIds: [], collapsedKeys: new Set() },
     config: {
       rowHeight: 40,
       headerHeight: 44,

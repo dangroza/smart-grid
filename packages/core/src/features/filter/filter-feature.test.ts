@@ -26,6 +26,8 @@ function createMockState(
     filter: { criteria, mode },
     selection: { selectedIds: new Set(), allSelected: false },
     pagination: { page: 0, pageSize: 50, totalRows: 0 },
+    freeze: { leftCount: 0, rightCount: 0 },
+    grouping: { columnIds: [], collapsedKeys: new Set() },
     config: {
       rowHeight: 40,
       headerHeight: 44,

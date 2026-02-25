@@ -25,6 +25,7 @@ export type {
   FilterMode,
   PaginationState,
   FreezeState,
+  GroupingState,
   SelectionState,
   ViewportState,
   ViewportRange,
@@ -74,5 +75,6 @@ export { createCellRendererRegistry, defaultCellRenderer } from './render/cell-r
 export { resolveVisibleColumnsForWidth } from './features/columns/column-widths';
 export { buildFrozenRenderColumnIndexes, clampFreezeCounts } from './features/freeze/freeze-utils';
 export { createFilterFeature, createFilterStep } from './features/filter/filter-feature';
+export { createGroupingFeature, createGroupingStep } from './features/grouping/grouping-feature';
 export { createPaginationFeature, createPaginationStep } from './features/pagination/pagination-feature';
 export { createSortFeature, createSortStep } from './features/sort/sort-feature';

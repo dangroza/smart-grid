@@ -1,11 +1,12 @@
 // =============================================================================
 // Smart Grid — Pipeline Integration Tests
-// Feature composition: filter + sort + pagination.
+// Feature composition: filter + sort + grouping + pagination.
 // =============================================================================
 
 import { describe, expect, it } from 'vitest';
 import { createPipeline } from './pipeline';
 import { createFilterStep } from '../features/filter/filter-feature';
+import { createGroupingStep } from '../features/grouping/grouping-feature';
 import { createPaginationStep } from '../features/pagination/pagination-feature';
 import { createSortStep } from '../features/sort/sort-feature';
 import type { ColumnDef, FilterMode, GridState, Row, SortCriterion } from '../types';
@@ -15,6 +16,7 @@ function createMockState(input: {
   readonly filterCriteria?: GridState['filter']['criteria'];
   readonly filterMode?: FilterMode;
   readonly sortCriteria?: ReadonlyArray<SortCriterion>;
+  readonly groupingColumnIds?: ReadonlyArray<string>;
   readonly page?: number;
   readonly pageSize?: number;
 }): GridState {
@@ -40,6 +42,8 @@ function createMockState(input: {
       pageSize: input.pageSize ?? 0,
       totalRows: 0,
     },
+    freeze: { leftCount: 0, rightCount: 0 },
+    grouping: { columnIds: input.groupingColumnIds ?? [], collapsedKeys: new Set() },
     config: {
       rowHeight: 40,
       headerHeight: 44,
@@ -75,6 +79,7 @@ describe('Pipeline integration', () => {
 
     // Intentionally added out of order; priority should still control execution.
     pipeline.addStep('sort', createSortStep(), 20);
+    pipeline.addStep('grouping', createGroupingStep(), 25);
     pipeline.addStep('pagination', createPaginationStep(), 30);
     pipeline.addStep('filter', createFilterStep(), 10);
 
@@ -112,6 +117,7 @@ describe('Pipeline integration', () => {
     const pipeline = createPipeline();
     pipeline.addStep('filter', createFilterStep(), 10);
     pipeline.addStep('sort', createSortStep(), 20);
+    pipeline.addStep('grouping', createGroupingStep(), 25);
     pipeline.addStep('pagination', createPaginationStep(), 30);
 
     const result = pipeline.process(rows, state);
@@ -120,6 +126,45 @@ describe('Pipeline integration', () => {
     expect(result).toEqual([
       { id: 1, status: 'active', score: 10 },
       { id: 4, status: 'inactive', score: 20 },
+    ]);
+  });
+
+  it('groups rows before pagination', () => {
+    const rows: ReadonlyArray<Row> = [
+      { id: 1, team: 'A', score: 11 },
+      { id: 2, team: 'B', score: 22 },
+      { id: 3, team: 'A', score: 33 },
+      { id: 4, team: 'B', score: 44 },
+    ];
+
+    const state = createMockState({
+      columns: [
+        { id: 'team', field: 'team', header: 'Team', width: 100 },
+        { id: 'score', field: 'score', header: 'Score', width: 100 },
+      ],
+      groupingColumnIds: ['team'],
+      page: 0,
+      pageSize: 3,
+    });
+
+    const pipeline = createPipeline();
+    pipeline.addStep('grouping', createGroupingStep(), 25);
+    pipeline.addStep('pagination', createPaginationStep(), 30);
+
+    const result = pipeline.process(rows, state);
+
+    expect(result).toEqual([
+      {
+        __sg_group: true,
+        __sg_group_key: 'team:s:A',
+        __sg_group_level: 0,
+        __sg_group_count: 2,
+        __sg_group_label: 'A',
+        __sg_group_column_id: 'team',
+        __sg_group_expanded: true,
+      },
+      { id: 1, team: 'A', score: 11 },
+      { id: 3, team: 'A', score: 33 },
     ]);
   });
 });

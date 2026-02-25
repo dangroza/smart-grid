@@ -43,6 +43,7 @@ export interface ColumnDef {
   readonly maxWidth?: number;
   readonly sortable?: boolean;
   readonly filterable?: boolean;
+  readonly groupable?: boolean;
   readonly resizable?: boolean;
   readonly visible?: boolean;
   readonly cellRenderer?: CellRendererFn;
@@ -118,6 +119,15 @@ export interface FreezeState {
 }
 
 // -----------------------------------------------------------------------------
+// Grouping
+// -----------------------------------------------------------------------------
+
+export interface GroupingState {
+  readonly columnIds: ReadonlyArray<ColumnId>;
+  readonly collapsedKeys: ReadonlySet<string>;
+}
+
+// -----------------------------------------------------------------------------
 // Selection
 // -----------------------------------------------------------------------------
 
@@ -173,6 +183,7 @@ export interface GridState {
   readonly selection: SelectionState;
   readonly pagination: PaginationState;
   readonly freeze: FreezeState;
+  readonly grouping: GroupingState;
   readonly config: GridConfig;
 }
 
@@ -222,6 +233,9 @@ export interface GridEvents {
 
   // Freeze events
   'freeze:changed': { leftCount: number; rightCount: number };
+
+  // Grouping events
+  'grouping:changed': { columnIds: ReadonlyArray<ColumnId>; collapsedKeys: ReadonlySet<string> };
 
   // Column events
   'column:resized': { columnId: ColumnId; width: number };
@@ -351,6 +365,7 @@ export interface GridOptions {
     readonly leftCount?: number;
     readonly rightCount?: number;
   };
+  readonly initialGrouping?: ReadonlyArray<ColumnId>;
   readonly height?: number | 'auto';
   readonly rowHeight?: number;
   readonly headerHeight?: number;
@@ -375,6 +390,9 @@ export interface SmartGridAPI {
   freezeLeftTo(columnId: ColumnId): void;
   freezeRightFrom(columnId: ColumnId): void;
   clearFreeze(): void;
+  setGrouping(columnIds: ReadonlyArray<ColumnId>): void;
+  clearGrouping(): void;
+  toggleGroup(groupKey: string): void;
   resizeColumn(columnId: ColumnId, width: number): void;
   reorderColumn(columnId: ColumnId, toVisibleIndex: number): void;
   getState(): GridState;

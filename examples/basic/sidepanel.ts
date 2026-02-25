@@ -413,6 +413,34 @@ export function mountSmartSidePanel(options: SidePanelOptions): () => void {
   freezeSection.appendChild(freezeToolbar);
   freezeSection.appendChild(freezeInfo);
 
+  // Grouping section
+  const groupingSection = el('section', 'sg-sidepanel__section');
+  groupingSection.appendChild(el('h2', 'sg-sidepanel__section-title', 'Grouping'));
+
+  const groupPrimarySelect = makeStringSelect(['none'], 'none');
+  const groupSecondarySelect = makeStringSelect(['none'], 'none');
+  const groupingInfo = el('div', 'sg-sidepanel__hint', '');
+  const groupingToolbar = el('div', 'sg-sidepanel__toolbar');
+
+  const applyGroupingBtn = makeButton('Apply grouping', () => {
+    const primary = groupPrimarySelect.value;
+    const secondary = groupSecondarySelect.value;
+    const next = [primary, secondary].filter((columnId, index, arr) => columnId !== 'none' && arr.indexOf(columnId) === index);
+    grid.setGrouping(next);
+  }, 'primary');
+
+  const clearGroupingBtn = makeButton('Clear', () => {
+    grid.clearGrouping();
+  });
+
+  groupingToolbar.appendChild(applyGroupingBtn);
+  groupingToolbar.appendChild(clearGroupingBtn);
+
+  groupingSection.appendChild(labeledRow('Primary group', groupPrimarySelect));
+  groupingSection.appendChild(labeledRow('Secondary group', groupSecondarySelect));
+  groupingSection.appendChild(groupingToolbar);
+  groupingSection.appendChild(groupingInfo);
+
   // Sorting section
   const sortSection = el('section', 'sg-sidepanel__section');
   sortSection.appendChild(el('h2', 'sg-sidepanel__section-title', 'Sorting'));
@@ -557,6 +585,7 @@ export function mountSmartSidePanel(options: SidePanelOptions): () => void {
   content.appendChild(settingsSection);
   content.appendChild(sizingSection);
   content.appendChild(freezeSection);
+  content.appendChild(groupingSection);
   content.appendChild(sortSection);
   content.appendChild(filterSection);
   content.appendChild(paginationSection);
@@ -675,6 +704,26 @@ export function mountSmartSidePanel(options: SidePanelOptions): () => void {
     }
   }
 
+  function syncGroupingUI(): void {
+    const state = grid.getState();
+    const groupableColumns = state.columns
+      .filter((column) => column.groupable !== false)
+      .map((column) => ({ value: column.id, label: `${column.header} (${column.id})` }));
+
+    const options = [{ value: 'none', label: 'none' }, ...groupableColumns];
+    setSelectOptions(groupPrimarySelect, options);
+    setSelectOptions(groupSecondarySelect, options);
+
+    const [first, second] = state.grouping.columnIds;
+    groupPrimarySelect.value = first ?? 'none';
+    groupSecondarySelect.value = second ?? 'none';
+
+    groupingInfo.textContent =
+      state.grouping.columnIds.length > 0
+        ? `Grouping by: ${state.grouping.columnIds.join(' → ')}`
+        : 'Grouping disabled';
+  }
+
   function syncFreezeUI(): void {
     const state = grid.getState();
     const visibleColumns = state.columns.filter((column) => column.visible !== false);
@@ -705,6 +754,7 @@ export function mountSmartSidePanel(options: SidePanelOptions): () => void {
   lastConfigRef = grid.getState().config;
   syncColumnSizingUI();
   syncFreezeUI();
+  syncGroupingUI();
   syncPaginationUI();
   syncSortFilterUI();
 
@@ -724,6 +774,7 @@ export function mountSmartSidePanel(options: SidePanelOptions): () => void {
       syncConfigInputs(state.config);
     }
     syncFreezeUI();
+    syncGroupingUI();
     syncPaginationUI();
     syncSortFilterUI();
   });

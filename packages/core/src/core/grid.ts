@@ -24,6 +24,7 @@ import { clampColumnWidth, reorderVisibleColumns } from '../features/columns/col
 import { resolveVisibleColumnsForWidth } from '../features/columns/column-widths';
 import { buildFrozenRenderColumnIndexes, clampFreezeCounts } from '../features/freeze/freeze-utils';
 import { createFilterFeature } from '../features/filter/filter-feature';
+import { createGroupingFeature } from '../features/grouping/grouping-feature';
 import { createPaginationFeature } from '../features/pagination/pagination-feature';
 import { createSortFeature } from '../features/sort/sort-feature';
 
@@ -47,6 +48,7 @@ export function createGrid(options: GridOptions): SmartGridAPI {
     initialFilterMode = 'client',
     initialPagination,
     initialFreeze,
+    initialGrouping = [],
     height,
     rowHeight: rowHeightOption = 40,
     headerHeight: headerHeightOption = 44,
@@ -69,7 +71,13 @@ export function createGrid(options: GridOptions): SmartGridAPI {
         ? height
         : undefined;
 
-  const allFeatures = [createFilterFeature(), createSortFeature(), createPaginationFeature(), ...features];
+  const allFeatures = [
+    createFilterFeature(),
+    createSortFeature(),
+    createGroupingFeature(),
+    createPaginationFeature(),
+    ...features,
+  ];
 
   // --- Create layers ---
 
@@ -126,6 +134,7 @@ export function createGrid(options: GridOptions): SmartGridAPI {
     initialFreezeLeft,
     initialFreezeRight,
   );
+  const initialGroupingColumnIds = normalizeGroupingColumnIds(initialGrouping, columns);
 
   // --- Initialize state ---
 
@@ -149,6 +158,10 @@ export function createGrid(options: GridOptions): SmartGridAPI {
       freeze: {
         leftCount: initialFreezeCounts.leftCount,
         rightCount: initialFreezeCounts.rightCount,
+      },
+      grouping: {
+        columnIds: initialGroupingColumnIds,
+        collapsedKeys: new Set(),
       },
     }));
   });
@@ -648,10 +661,15 @@ export function createGrid(options: GridOptions): SmartGridAPI {
     store.update((prev) => {
       const visibleCount = newColumns.filter((column) => column.visible !== false).length;
       const freeze = clampFreezeCounts(visibleCount, prev.freeze.leftCount, prev.freeze.rightCount);
+      const grouping = {
+        columnIds: normalizeGroupingColumnIds(prev.grouping.columnIds, newColumns),
+        collapsedKeys: new Set<string>(),
+      };
       return {
         ...prev,
         columns: newColumns,
         freeze,
+        grouping,
       };
     });
     eventBus.emit('columns:set', { columns: newColumns });
@@ -827,6 +845,53 @@ export function createGrid(options: GridOptions): SmartGridAPI {
     setFrozenColumns(0, 0);
   }
 
+  function setGrouping(columnIds: ReadonlyArray<string>): void {
+    const nextColumnIds = normalizeGroupingColumnIds(columnIds, store.getState().columns);
+
+    store.update((prev) => ({
+      ...prev,
+      grouping: {
+        columnIds: nextColumnIds,
+        collapsedKeys: new Set<string>(),
+      },
+    }));
+
+    eventBus.emit('grouping:changed', { columnIds: nextColumnIds, collapsedKeys: new Set() });
+  }
+
+  function clearGrouping(): void {
+    setGrouping([]);
+  }
+
+  function toggleGroup(groupKey: string): void {
+    if (!groupKey) {
+      return;
+    }
+
+    let nextCollapsed = new Set<string>();
+    store.update((prev) => {
+      const collapsed = new Set(prev.grouping.collapsedKeys);
+      if (collapsed.has(groupKey)) {
+        collapsed.delete(groupKey);
+      } else {
+        collapsed.add(groupKey);
+      }
+
+      nextCollapsed = collapsed;
+
+      return {
+        ...prev,
+        grouping: {
+          ...prev.grouping,
+          collapsedKeys: collapsed,
+        },
+      };
+    });
+
+    const grouping = store.getState().grouping;
+    eventBus.emit('grouping:changed', { columnIds: grouping.columnIds, collapsedKeys: nextCollapsed });
+  }
+
   function resizeColumn(columnId: string, width: number): void {
     resizeColumnInternal(columnId, width, true);
   }
@@ -845,6 +910,47 @@ export function createGrid(options: GridOptions): SmartGridAPI {
     scroller.scrollTo(row, col);
   }
 
+  function onGroupToggleClick(event: MouseEvent): void {
+    const target = event.target as HTMLElement | null;
+    const toggle = target?.closest('.sg-grid__group-toggle') as HTMLElement | null;
+    if (!toggle) {
+      return;
+    }
+
+    const groupKey = toggle.getAttribute('data-group-key');
+    if (!groupKey) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    toggleGroup(groupKey);
+  }
+
+  function onGroupToggleKeyDown(event: KeyboardEvent): void {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return;
+    }
+
+    const target = event.target as HTMLElement | null;
+    const toggle = target?.closest('.sg-grid__group-toggle') as HTMLElement | null;
+    if (!toggle) {
+      return;
+    }
+
+    const groupKey = toggle.getAttribute('data-group-key');
+    if (!groupKey) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    toggleGroup(groupKey);
+  }
+
+  container.addEventListener('click', onGroupToggleClick);
+  container.addEventListener('keydown', onGroupToggleKeyDown);
+
   function destroy(): void {
     if (headerEl) {
       headerEl.removeEventListener('mousedown', onHeaderMouseDown);
@@ -852,6 +958,8 @@ export function createGrid(options: GridOptions): SmartGridAPI {
     }
     onResizeMouseUp();
     onReorderMouseUp();
+    container.removeEventListener('click', onGroupToggleClick);
+    container.removeEventListener('keydown', onGroupToggleKeyDown);
     hideDragIndicator();
     dragIndicatorEl.remove();
 
@@ -883,6 +991,9 @@ export function createGrid(options: GridOptions): SmartGridAPI {
     freezeLeftTo,
     freezeRightFrom,
     clearFreeze,
+    setGrouping,
+    clearGrouping,
+    toggleGroup,
     resizeColumn,
     reorderColumn,
     getState: store.getState,
@@ -891,6 +1002,26 @@ export function createGrid(options: GridOptions): SmartGridAPI {
     scrollTo,
     destroy,
   };
+}
+
+function normalizeGroupingColumnIds(
+  requestedColumnIds: ReadonlyArray<string>,
+  columns: ReadonlyArray<ColumnDef>,
+): ReadonlyArray<string> {
+  const groupableIds = new Set(
+    columns.filter((column) => column.groupable !== false).map((column) => column.id),
+  );
+  const unique = new Set<string>();
+
+  for (const columnId of requestedColumnIds) {
+    if (!groupableIds.has(columnId)) {
+      continue;
+    }
+
+    unique.add(columnId);
+  }
+
+  return [...unique];
 }
 
 function sameRowSequence(left: ReadonlyArray<Row>, right: ReadonlyArray<Row>): boolean {

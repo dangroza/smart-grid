@@ -8,8 +8,18 @@ import type {
   ColumnDef,
   ColumnId,
   DOMRenderer,
+  Row,
   VisibleSlice,
 } from '../types';
+import {
+  GROUP_ROW_COLUMN_ID_FIELD,
+  GROUP_ROW_COUNT_FIELD,
+  GROUP_ROW_EXPANDED_FIELD,
+  GROUP_ROW_KEY_FIELD,
+  GROUP_ROW_LABEL_FIELD,
+  GROUP_ROW_LEVEL_FIELD,
+  isGroupRow,
+} from '../features/grouping/grouping-row';
 import { createCellRendererRegistry } from './cell-renderer';
 import { applyCellContent, createElement, setCSSVar } from './dom-utils';
 
@@ -118,6 +128,7 @@ export function createDOMRenderer(): DOMRenderer {
       const rowEl = rowPool[ri]!;
       const cells = cellPool.get(rowEl)!;
       const absoluteRowIndex = range.startRow + ri;
+      const isGroup = !!row && isGroupRow(row);
 
       // Show this row element
       rowEl.style.display = '';
@@ -126,6 +137,7 @@ export function createDOMRenderer(): DOMRenderer {
       rowEl.setAttribute('aria-rowindex', String(absoluteRowIndex + 1)); // 1-based
       rowEl.classList.toggle('sg-grid__row--even', absoluteRowIndex % 2 === 0);
       rowEl.classList.toggle('sg-grid__row--odd', absoluteRowIndex % 2 !== 0);
+      rowEl.classList.toggle('sg-grid__row--group', isGroup);
 
       // Update cells
       for (let ci = 0; ci < visibleColCount; ci++) {
@@ -136,9 +148,17 @@ export function createDOMRenderer(): DOMRenderer {
         cellEl.style.display = '';
 
         if (row && col) {
-          const value = row[col.field];
-          const content = cellRenderers.renderCell(value, row, col);
-          applyCellContent(cellEl, content);
+          if (isGroup) {
+            if (ci === 0) {
+              applyCellContent(cellEl, renderGroupCellContent(row, col));
+            } else {
+              applyCellContent(cellEl, '');
+            }
+          } else {
+            const value = row[col.field];
+            const content = cellRenderers.renderCell(value, row, col);
+            applyCellContent(cellEl, content);
+          }
 
           // Position cell via CSS (left offset + width)
           const colAbsoluteIndex = columnIndexes[ci] ?? 0;
@@ -161,6 +181,8 @@ export function createDOMRenderer(): DOMRenderer {
             'sg-grid__cell--frozen-right',
             colAbsoluteIndex >= totalVisibleCols - rightFrozenCount,
           );
+          cellEl.classList.toggle('sg-grid__cell--group-main', isGroup && ci === 0);
+          cellEl.classList.toggle('sg-grid__cell--group-empty', isGroup && ci > 0);
         }
       }
 
@@ -312,6 +334,47 @@ export function createDOMRenderer(): DOMRenderer {
         cells.push(cellEl);
       }
     }
+  }
+
+  function renderGroupCellContent(row: Row, column: ColumnDef): HTMLElement {
+    const wrapper = createElement('div', 'sg-grid__group-cell');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'sg-grid__group-toggle';
+
+    const key = row[GROUP_ROW_KEY_FIELD];
+    if (typeof key === 'string') {
+      button.setAttribute('data-group-key', key);
+    }
+
+    const level = row[GROUP_ROW_LEVEL_FIELD];
+    const safeLevel = typeof level === 'number' && Number.isFinite(level) && level > 0 ? Math.floor(level) : 0;
+    button.setAttribute('data-group-level', String(safeLevel));
+
+    const expanded = row[GROUP_ROW_EXPANDED_FIELD] !== false;
+    const icon = createElement('span', 'sg-grid__group-toggle-icon');
+    icon.textContent = expanded ? '▾' : '▸';
+    icon.setAttribute('aria-hidden', 'true');
+
+    const labelRaw = row[GROUP_ROW_LABEL_FIELD];
+    const countRaw = row[GROUP_ROW_COUNT_FIELD];
+    const label = labelRaw === null || labelRaw === undefined ? '∅' : String(labelRaw);
+    const count = typeof countRaw === 'number' && Number.isFinite(countRaw) ? Math.max(0, Math.floor(countRaw)) : 0;
+
+    const groupingColumnId = row[GROUP_ROW_COLUMN_ID_FIELD];
+    const groupingLabel = typeof groupingColumnId === 'string' ? groupingColumnId : column.header;
+    const levelPrefix = safeLevel > 0 ? `${'• '.repeat(safeLevel)}` : '';
+    const text = `${levelPrefix}${groupingLabel}: ${label} (${count})`;
+    const labelEl = createElement('span', 'sg-grid__group-toggle-label');
+    labelEl.textContent = text;
+
+    button.setAttribute('aria-label', `${expanded ? 'Collapse' : 'Expand'} group ${label}`);
+    button.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    button.appendChild(icon);
+    button.appendChild(labelEl);
+    wrapper.appendChild(button);
+
+    return wrapper;
   }
 
   function setCellRenderer(columnId: ColumnId, renderer: CellRendererFn): void {
