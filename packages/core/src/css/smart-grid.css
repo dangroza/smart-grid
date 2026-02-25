@@ -1,0 +1,257 @@
+/* =============================================================================
+ * Smart Grid — Base Styles
+ *
+ * BEM naming: .sg-grid, .sg-grid__row, .sg-grid__cell
+ * Modifiers: .sg-grid__row--selected, .sg-grid__row--even
+ *
+ * No inline styles from JS — only class toggling and CSS custom properties.
+ * ============================================================================= */
+
+@import './variables.css';
+
+/* ---------------------------------------------------------------------------
+ * Grid container
+ * --------------------------------------------------------------------------- */
+
+.sg-grid {
+  position: relative;
+  font-family: var(--sg-font-family);
+  font-size: var(--sg-font-size);
+  color: var(--sg-row-color);
+  border: var(--sg-border-width) solid var(--sg-border-color);
+  overflow: hidden;
+  contain: strict;
+  width: 100%;
+  height: 100%;
+}
+
+/* ---------------------------------------------------------------------------
+ * Scroll container — this element scrolls
+ * --------------------------------------------------------------------------- */
+
+.sg-grid__scroll-container {
+  position: relative;
+  overflow: auto;
+  width: 100%;
+  height: calc(100% - var(--sg-header-height));
+  will-change: scroll-position;
+}
+
+/* Custom scrollbar */
+.sg-grid__scroll-container::-webkit-scrollbar {
+  width: var(--sg-scrollbar-width);
+  height: var(--sg-scrollbar-width);
+}
+
+.sg-grid__scroll-container::-webkit-scrollbar-track {
+  background: var(--sg-scrollbar-track);
+}
+
+.sg-grid__scroll-container::-webkit-scrollbar-thumb {
+  background: var(--sg-scrollbar-thumb);
+  border-radius: 4px;
+}
+
+.sg-grid__scroll-container::-webkit-scrollbar-thumb:hover {
+  background: var(--sg-scrollbar-thumb-hover);
+}
+
+/* ---------------------------------------------------------------------------
+ * Spacer — sets total scrollable area (virtual height/width)
+ * --------------------------------------------------------------------------- */
+
+.sg-grid__spacer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: var(--sg-total-height, 0);
+  pointer-events: none;
+}
+
+/* ---------------------------------------------------------------------------
+ * Body — contains visible rows, positioned via translateY
+ * --------------------------------------------------------------------------- */
+
+.sg-grid__body {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  transform: translateY(var(--sg-body-offset, 0));
+  will-change: transform;
+}
+
+/* ---------------------------------------------------------------------------
+ * Header
+ * --------------------------------------------------------------------------- */
+
+.sg-grid__header {
+  position: relative;
+  display: flex;
+  height: var(--sg-header-height);
+  background: var(--sg-header-bg);
+  border-bottom: var(--sg-border-width) solid var(--sg-border-color);
+  overflow: hidden;
+  z-index: 1;
+}
+
+.sg-grid__header-cell {
+  position: absolute;
+  top: 0;
+  left: var(--sg-cell-left, 0);
+  width: var(--sg-cell-width, 100px);
+  height: var(--sg-header-height);
+  display: flex;
+  align-items: center;
+  padding: var(--sg-cell-padding);
+  font-size: var(--sg-font-size-header);
+  font-weight: var(--sg-header-font-weight);
+  color: var(--sg-header-color);
+  border-right: var(--sg-border-width) solid var(--sg-border-color);
+  box-sizing: border-box;
+  user-select: none;
+  cursor: grab;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sg-grid__header-cell--dragging {
+  opacity: 0.6;
+}
+
+.sg-grid__header-cell--drag-over {
+  background: color-mix(in srgb, var(--sg-header-bg), #8ea6b6 12%);
+}
+
+.sg-grid__header-cell:focus-visible {
+  outline: none;
+  box-shadow: inset var(--sg-focus-ring);
+  z-index: 2;
+}
+
+.sg-grid__header-cell--frozen-left,
+.sg-grid__header-cell--frozen-right {
+  z-index: 3;
+  background: var(--sg-header-bg);
+}
+
+.sg-grid__header-cell--frozen-left {
+  box-shadow: 1px 0 0 0 var(--sg-border-color);
+}
+
+.sg-grid__header-cell--frozen-right {
+  box-shadow: -1px 0 0 0 var(--sg-border-color);
+}
+
+.sg-grid__header-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sg-grid__header-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+}
+
+.sg-grid__header-resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 20%;
+  bottom: 20%;
+  right: 3px;
+  width: 2px;
+  background: color-mix(in srgb, var(--sg-border-color), black 10%);
+  opacity: 0.45;
+}
+
+/* ---------------------------------------------------------------------------
+ * Row
+ * --------------------------------------------------------------------------- */
+
+.sg-grid__row {
+  position: relative;
+  display: flex;
+  height: var(--sg-row-height);
+  border-bottom: var(--sg-border-width) solid var(--sg-border-color);
+  box-sizing: border-box;
+}
+
+.sg-grid__row--even {
+  background: var(--sg-row-bg);
+}
+
+.sg-grid__row--odd {
+  background: var(--sg-row-bg-alt);
+}
+
+.sg-grid__row:hover {
+  background: var(--sg-row-bg-hover);
+}
+
+.sg-grid__row--selected {
+  background: var(--sg-row-bg-selected);
+}
+
+/* ---------------------------------------------------------------------------
+ * Cell
+ * --------------------------------------------------------------------------- */
+
+.sg-grid__cell {
+  position: absolute;
+  top: 0;
+  left: var(--sg-cell-left, 0);
+  width: var(--sg-cell-width, 100px);
+  height: var(--sg-row-height);
+  display: flex;
+  align-items: center;
+  padding: var(--sg-cell-padding);
+  color: var(--sg-cell-color);
+  border-right: var(--sg-border-width) solid var(--sg-border-color);
+  box-sizing: border-box;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sg-grid__cell:focus {
+  outline: none;
+  box-shadow: var(--sg-focus-ring-offset), var(--sg-focus-ring);
+  z-index: 1;
+}
+
+.sg-grid__cell--frozen-left,
+.sg-grid__cell--frozen-right {
+  z-index: 2;
+  background: inherit;
+}
+
+.sg-grid__cell--frozen-left {
+  box-shadow: 1px 0 0 0 var(--sg-border-color);
+}
+
+.sg-grid__cell--frozen-right {
+  box-shadow: -1px 0 0 0 var(--sg-border-color);
+}
+
+/* ---------------------------------------------------------------------------
+ * Accessibility — focus visible
+ * --------------------------------------------------------------------------- */
+
+.sg-grid__cell:focus-visible {
+  outline: none;
+  box-shadow: var(--sg-focus-ring-offset), var(--sg-focus-ring);
+  z-index: 1;
+}
+
+.sg-grid__row:focus-visible {
+  outline: none;
+  box-shadow: inset var(--sg-focus-ring);
+}

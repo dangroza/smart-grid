@@ -1,0 +1,27 @@
+{
+  "name": "smart-grid",
+  "version": "0.1.0",
+  "private": true,
+  "description": "High-performance, framework-agnostic headless data grid engine",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*",
+    "examples/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev:basic",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit -p packages/core/tsconfig.json",
+    "dev:basic": "npm run dev -w @smart-grid/example-basic",
+    "build:basic": "npm run build -w @smart-grid/example-basic",
+    "preview:basic": "npm run preview -w @smart-grid/example-basic",
+    "license-check": "echo 'TODO: Add license-checker when dependencies exist'"
+  },
+  "devDependencies": {
+    "jsdom": "^24.1.3",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}

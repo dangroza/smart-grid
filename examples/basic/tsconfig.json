@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@smart-grid/core": ["../../packages/core/src/index.ts"]
+    }
+  },
+  "include": ["./**/*.ts"]
+}
