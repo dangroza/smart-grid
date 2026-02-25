@@ -20,11 +20,12 @@ export function calculateVisibleRowRange(
     return { startRow: 0, endRow: 0 };
   }
 
-  const firstVisible = Math.floor(scrollTop / rowHeight);
+  const firstVisibleRaw = Math.floor(scrollTop / rowHeight);
+  const firstVisible = Math.max(0, Math.min(firstVisibleRaw, totalRows - 1));
   const visibleCount = Math.ceil(containerHeight / rowHeight);
 
-  const startRow = Math.max(0, firstVisible - overscan);
-  const endRow = Math.min(totalRows, firstVisible + visibleCount + overscan);
+  const startRow = Math.max(0, Math.min(firstVisible - overscan, totalRows));
+  const endRow = Math.max(startRow, Math.min(totalRows, firstVisible + visibleCount + overscan));
 
   return { startRow, endRow };
 }

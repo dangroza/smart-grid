@@ -5,6 +5,7 @@
 
 import { createGrid } from '@smart-grid/core';
 import '@smart-grid/core/css/smart-grid.css';
+import { mountPaginationFooter } from './footer';
 import { generateColumns, generateRows } from './mock-data';
 import { mountSmartSidePanel } from './sidepanel';
 
@@ -14,8 +15,10 @@ const COL_COUNT = 50;
 const INITIAL_SORT = [{ columnId: 'id', direction: 'asc' as const }];
 const INITIAL_FILTER: [] = [];
 const INITIAL_FILTER_MODE = 'client' as const;
-const INITIAL_PAGINATION = { page: 0, pageSize: 0 };
+const INITIAL_PAGINATION = { page: 0, pageSize: 500 };
 const INITIAL_FREEZE = { leftCount: 0, rightCount: 0 };
+const INITIAL_HEIGHT: number | 'auto' = 620;
+const FOOTER_MODE = 'embedded' as const;
 
 const container = document.getElementById('grid-container');
 if (!container) throw new Error('Grid container not found');
@@ -36,11 +39,15 @@ const grid = createGrid({
   initialFilterMode: INITIAL_FILTER_MODE,
   initialPagination: INITIAL_PAGINATION,
   initialFreeze: INITIAL_FREEZE,
-  rowHeight: 40,
-  headerHeight: 44,
-  overscanRows: 10,
-  overscanColumns: 5,
-  rowIdField: 'id',
+  config: {
+    height: typeof INITIAL_HEIGHT === 'number' ? INITIAL_HEIGHT : 620,
+    heightMode: INITIAL_HEIGHT === 'auto' ? 'auto' : 'fixed',
+    rowHeight: 40,
+    headerHeight: 44,
+    overscanRows: 10,
+    overscanColumns: 5,
+    rowIdField: 'id',
+  },
 });
 const t2 = performance.now();
 
@@ -78,10 +85,16 @@ if (sidepanel) {
   });
 }
 
+const footerHost = document.getElementById('footer-host');
+const unmountFooter = footerHost
+  ? mountPaginationFooter({ target: footerHost, grid, mode: FOOTER_MODE })
+  : () => {};
+
 // Expose for debugging
 (window as unknown as Record<string, unknown>)['smartGrid'] = grid;
 
 // Best-effort cleanup for hot-reload / page unload
 window.addEventListener('beforeunload', () => {
   unsubStats();
+  unmountFooter();
 });

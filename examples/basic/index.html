@@ -39,8 +39,18 @@
       min-height: 0;
     }
 
-    #grid-container {
+    .grid-shell {
       flex: 1;
+      min-width: 0;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    #grid-container {
+      flex: 0 0 auto;
+      width: 100%;
       background: #ffffff;
       border-radius: 4px;
       overflow: hidden;
@@ -191,6 +201,105 @@
         display: none;
       }
     }
+
+    #footer-host {
+      margin: 0;
+    }
+
+    .sg-pagination-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      min-height: 42px;
+      padding: 6px 10px;
+      border: 1px solid #e7ebed;
+      border-radius: 0;
+      background: #efefef;
+      color: #303030;
+      font-size: 13px;
+    }
+
+    .sg-pagination-footer__left,
+    .sg-pagination-footer__center,
+    .sg-pagination-footer__right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .sg-pagination-footer__left,
+    .sg-pagination-footer__right {
+      flex: 1;
+    }
+
+    .sg-pagination-footer__center {
+      justify-content: center;
+      white-space: nowrap;
+    }
+
+    .sg-pagination-footer__right {
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .sg-pagination-footer__label,
+    .sg-pagination-footer__items {
+      font-size: 13px;
+      line-height: 1;
+      color: #2f2f2f;
+    }
+
+    .sg-pagination-footer__select,
+    .sg-pagination-footer__page-input {
+      height: 34px;
+      border: 1px solid #6f91a8;
+      border-radius: 4px;
+      background: #f6f6f6;
+      color: #2f2f2f;
+      padding: 0 10px;
+      font-size: 13px;
+      line-height: 1;
+      min-width: 86px;
+    }
+
+    .sg-pagination-footer__page-input {
+      width: 52px;
+      text-align: center;
+      min-width: 52px;
+      -moz-appearance: textfield;
+    }
+
+    .sg-pagination-footer__page-input::-webkit-outer-spin-button,
+    .sg-pagination-footer__page-input::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+
+    .sg-pagination-footer__link-btn {
+      border: none;
+      background: transparent;
+      color: #7a7a7a;
+      font-size: 13px;
+      line-height: 1;
+      padding: 0;
+      cursor: pointer;
+    }
+
+    .sg-pagination-footer__link-btn:disabled {
+      color: #b3b3b3;
+      cursor: default;
+    }
+
+    .sg-pagination-footer--detached {
+      position: fixed;
+      left: 16px;
+      right: 16px;
+      bottom: 16px;
+      z-index: 999;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.15);
+    }
   </style>
 </head>
 <body>
@@ -199,7 +308,10 @@
     <span class="stats" id="stats">Loading...</span>
   </div>
   <div class="layout">
-    <div id="grid-container"></div>
+    <div class="grid-shell">
+      <div id="grid-container"></div>
+      <div id="footer-host"></div>
+    </div>
     <aside id="sidepanel" aria-label="Grid configuration"></aside>
   </div>
   <script type="module" src="./main.ts"></script>

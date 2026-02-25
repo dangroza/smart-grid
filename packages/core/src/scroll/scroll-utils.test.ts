@@ -60,6 +60,16 @@ describe('calculateVisibleRowRange', () => {
     expect(result.endRow).toBe(2525); // 2500 + 20 + 5
     expect(result.endRow - result.startRow).toBe(30); // reasonable DOM count
   });
+
+  it('should keep start/end valid when scrollTop is beyond content', () => {
+    const totalRows = 500;
+    const scrollTop = 999999;
+    const result = calculateVisibleRowRange(scrollTop, 400, totalRows, rowHeight, overscan);
+
+    expect(result.startRow).toBeLessThanOrEqual(result.endRow);
+    expect(result.endRow).toBe(totalRows);
+    expect(result.startRow).toBeGreaterThanOrEqual(0);
+  });
 });
 
 describe('buildPrefixSums', () => {

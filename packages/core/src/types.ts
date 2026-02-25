@@ -35,6 +35,10 @@ export interface ColumnDef {
   readonly field: string;
   readonly header: string;
   readonly width: number;
+  /** If true, width stays fixed and is excluded from fill-width distribution. */
+  readonly fixedWidth?: boolean;
+  /** Optional fill weight for using remaining horizontal space. 0/undefined = no fill behavior. */
+  readonly flexGrow?: number;
   readonly minWidth?: number;
   readonly maxWidth?: number;
   readonly sortable?: boolean;
@@ -148,6 +152,8 @@ export interface ViewportState {
 export interface GridConfig {
   readonly rowHeight: number;
   readonly headerHeight: number;
+  readonly heightMode?: 'auto' | 'fixed';
+  readonly height?: number;
   readonly overscanRows: number;
   readonly overscanColumns: number;
   readonly rowIdField: string;
@@ -332,6 +338,8 @@ export interface GridOptions {
   readonly container: HTMLElement;
   readonly columns: ReadonlyArray<ColumnDef>;
   readonly data?: ReadonlyArray<Row>;
+  /** Preferred options bag for grid configuration at initialization. */
+  readonly config?: Partial<GridConfig>;
   readonly initialSort?: ReadonlyArray<SortCriterion>;
   readonly initialFilter?: ReadonlyArray<FilterCriterion>;
   readonly initialFilterMode?: FilterMode;
@@ -343,6 +351,7 @@ export interface GridOptions {
     readonly leftCount?: number;
     readonly rightCount?: number;
   };
+  readonly height?: number | 'auto';
   readonly rowHeight?: number;
   readonly headerHeight?: number;
   readonly overscanRows?: number;

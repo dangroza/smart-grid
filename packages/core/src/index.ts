@@ -71,6 +71,7 @@ export { createPipeline } from './core/pipeline';
 export { createVirtualScroller } from './scroll/virtual-scroller';
 export { createDOMRenderer } from './render/dom-renderer';
 export { createCellRendererRegistry, defaultCellRenderer } from './render/cell-renderer';
+export { resolveVisibleColumnsForWidth } from './features/columns/column-widths';
 export { buildFrozenRenderColumnIndexes, clampFreezeCounts } from './features/freeze/freeze-utils';
 export { createFilterFeature, createFilterStep } from './features/filter/filter-feature';
 export { createPaginationFeature, createPaginationStep } from './features/pagination/pagination-feature';

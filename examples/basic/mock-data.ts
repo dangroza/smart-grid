@@ -33,10 +33,26 @@ function randomFrom<T>(arr: readonly T[]): T {
  */
 export function generateColumns(count: number): ColumnDef[] {
   const columns: ColumnDef[] = [
-    { id: 'id', field: 'id', header: 'ID', width: 70, sortable: true },
-    { id: 'firstName', field: 'firstName', header: 'First Name', width: 120, sortable: true, filterable: true },
-    { id: 'lastName', field: 'lastName', header: 'Last Name', width: 120, sortable: true, filterable: true },
-    { id: 'email', field: 'email', header: 'Email', width: 200, sortable: true },
+    { id: 'id', field: 'id', header: 'ID', width: 70, sortable: true, fixedWidth: true, resizable: false },
+    {
+      id: 'firstName',
+      field: 'firstName',
+      header: 'First Name',
+      width: 120,
+      sortable: true,
+      filterable: true,
+      flexGrow: 1,
+    },
+    {
+      id: 'lastName',
+      field: 'lastName',
+      header: 'Last Name',
+      width: 120,
+      sortable: true,
+      filterable: true,
+      flexGrow: 1,
+    },
+    { id: 'email', field: 'email', header: 'Email', width: 200, sortable: true, flexGrow: 2 },
     { id: 'department', field: 'department', header: 'Department', width: 130, sortable: true, filterable: true },
     { id: 'status', field: 'status', header: 'Status', width: 100, sortable: true },
     { id: 'salary', field: 'salary', header: 'Salary', width: 100, sortable: true },

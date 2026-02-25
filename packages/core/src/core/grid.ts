@@ -21,6 +21,7 @@ import { createStore } from './store';
 import { createVirtualScroller } from '../scroll/virtual-scroller';
 import { createDOMRenderer } from '../render/dom-renderer';
 import { clampColumnWidth, reorderVisibleColumns } from '../features/columns/column-operations';
+import { resolveVisibleColumnsForWidth } from '../features/columns/column-widths';
 import { buildFrozenRenderColumnIndexes, clampFreezeCounts } from '../features/freeze/freeze-utils';
 import { createFilterFeature } from '../features/filter/filter-feature';
 import { createPaginationFeature } from '../features/pagination/pagination-feature';
@@ -40,18 +41,33 @@ export function createGrid(options: GridOptions): SmartGridAPI {
     container,
     columns,
     data = [],
+    config: configOption,
     initialSort = [],
     initialFilter = [],
     initialFilterMode = 'client',
     initialPagination,
     initialFreeze,
-    rowHeight = 40,
-    headerHeight = 44,
-    overscanRows = 10,
-    overscanColumns = 5,
-    rowIdField = 'id',
+    height,
+    rowHeight: rowHeightOption = 40,
+    headerHeight: headerHeightOption = 44,
+    overscanRows: overscanRowsOption = 10,
+    overscanColumns: overscanColumnsOption = 5,
+    rowIdField: rowIdFieldOption = 'id',
     features = [],
   } = options;
+
+  const rowHeight = configOption?.rowHeight ?? rowHeightOption;
+  const headerHeight = configOption?.headerHeight ?? headerHeightOption;
+  const overscanRows = configOption?.overscanRows ?? overscanRowsOption;
+  const overscanColumns = configOption?.overscanColumns ?? overscanColumnsOption;
+  const rowIdField = configOption?.rowIdField ?? rowIdFieldOption;
+  const heightModeOption = configOption?.heightMode ?? (height === 'auto' ? 'auto' : 'fixed');
+  const heightValueOption =
+    typeof configOption?.height === 'number'
+      ? configOption.height
+      : typeof height === 'number'
+        ? height
+        : undefined;
 
   const allFeatures = [createFilterFeature(), createSortFeature(), createPaginationFeature(), ...features];
 
@@ -59,9 +75,17 @@ export function createGrid(options: GridOptions): SmartGridAPI {
 
   const eventBus = createEventBus();
 
+  const initialHeightMode = heightModeOption;
+  const initialFixedHeight =
+    typeof heightValueOption === 'number'
+      ? Math.max(80, Math.floor(heightValueOption))
+      : Math.max(80, container.clientHeight || 600);
+
   const store = createStore({
     rowHeight,
     headerHeight,
+    heightMode: initialHeightMode,
+    height: initialFixedHeight,
     overscanRows,
     overscanColumns,
     rowIdField,
@@ -76,6 +100,7 @@ export function createGrid(options: GridOptions): SmartGridAPI {
   });
 
   const renderer = createDOMRenderer();
+  let scrollEl: HTMLElement | null = null;
 
   const initialPageSize =
     initialPagination && typeof initialPagination.pageSize === 'number'
@@ -132,13 +157,35 @@ export function createGrid(options: GridOptions): SmartGridAPI {
 
   renderer.mount(container);
 
+  function getAvailableGridWidth(): number {
+    return scrollEl?.clientWidth ?? container.clientWidth;
+  }
+
+  function applyContainerHeight(config: GridConfig, totalRows: number): void {
+    const mode = config.heightMode ?? 'fixed';
+    const fixedHeight = (config.height ?? container.clientHeight) || 600;
+
+    if (mode === 'auto') {
+      const autoHeight = config.headerHeight + totalRows * config.rowHeight;
+      container.style.height = `${Math.max(config.headerHeight, autoHeight)}px`;
+      return;
+    }
+
+    container.style.height = `${Math.max(80, fixedHeight)}px`;
+  }
+
+  applyContainerHeight(store.getState().config, store.getState().processedData.length);
+
   // Set custom properties on container so the renderer can read them
   container.style.setProperty('--sg-row-height', `${rowHeight}px`);
   container.style.setProperty('--sg-header-height', `${headerHeight}px`);
 
   // --- Wire scroller to renderer ---
 
-  const columnWidths = columns.filter((c) => c.visible !== false).map((c) => c.width);
+  const columnWidths = resolveVisibleColumnsForWidth(
+    columns.filter((c) => c.visible !== false),
+    getAvailableGridWidth(),
+  ).map((c) => c.width);
   scroller.setDimensions(data.length, columnWidths);
 
   // Scroller drives rendering
@@ -155,7 +202,14 @@ export function createGrid(options: GridOptions): SmartGridAPI {
     }));
 
     // Build the visible slice for the renderer
-    const slice = buildVisibleSlice(state.processedData, state.columns, range, state.freeze, scroller);
+    const slice = buildVisibleSlice(
+      state.processedData,
+      state.columns,
+      range,
+      state.freeze,
+      getAvailableGridWidth(),
+      scroller,
+    );
     eventBus.emit('render:before', undefined);
     renderer.render(slice);
     eventBus.emit('render:after', { visibleRange: range });
@@ -164,19 +218,69 @@ export function createGrid(options: GridOptions): SmartGridAPI {
   // --- Wire store changes to pipeline + scroller ---
 
   const unsubStore = store.subscribe((state) => {
-    // Run data through pipeline
+    // Derive total rows from pipeline without pagination.
+    const unpaginatedState =
+      state.pagination.pageSize > 0
+        ? {
+            ...state,
+            pagination: {
+              ...state.pagination,
+              page: 0,
+              pageSize: 0,
+            },
+          }
+        : state;
+    const unpaginated = pipeline.process(state.data, unpaginatedState);
+    const derivedTotalRows = unpaginated.length;
+
+    const maxPage =
+      state.pagination.pageSize > 0
+        ? Math.max(0, Math.ceil(derivedTotalRows / state.pagination.pageSize) - 1)
+        : 0;
+    const clampedPage = state.pagination.pageSize > 0 ? Math.min(state.pagination.page, maxPage) : 0;
+
+    if (derivedTotalRows !== state.pagination.totalRows || clampedPage !== state.pagination.page) {
+      store.update((prev) => ({
+        ...prev,
+        pagination: {
+          ...prev.pagination,
+          totalRows: derivedTotalRows,
+          page: clampedPage,
+        },
+      }));
+      return;
+    }
+
+    // Run full pipeline with current pagination state.
     const processed = pipeline.process(state.data, state);
 
     // Update processedData if it changed
-    if (processed !== state.processedData) {
+    if (processed !== state.processedData && !sameRowSequence(processed, state.processedData)) {
       store.update((prev) => ({ ...prev, processedData: processed }));
       return; // The recursive update will trigger another subscribe call
     }
 
     // Update scroller dimensions
     const visibleColumns = state.columns.filter((c) => c.visible !== false);
-    const widths = visibleColumns.map((c) => c.width);
+    const widths = resolveVisibleColumnsForWidth(visibleColumns, getAvailableGridWidth()).map((c) => c.width);
     scroller.setDimensions(processed.length, widths);
+
+    applyContainerHeight(state.config, processed.length);
+
+    // Re-render current viewport even when range did not change
+    // (e.g., pagination page changes with same page size/row count).
+    const currentRange = scroller.getVisibleRange();
+    const slice = buildVisibleSlice(
+      state.processedData,
+      state.columns,
+      currentRange,
+      state.freeze,
+      getAvailableGridWidth(),
+      scroller,
+    );
+    eventBus.emit('render:before', undefined);
+    renderer.render(slice);
+    eventBus.emit('render:after', { visibleRange: currentRange });
 
     // Emit state change
     eventBus.emit('state:changed', { state });
@@ -184,7 +288,7 @@ export function createGrid(options: GridOptions): SmartGridAPI {
 
   // --- Attach scroller to the scroll container ---
   // The scroll container is created by the renderer inside the mount target
-  const scrollEl = container.querySelector('.sg-grid__scroll-container') as HTMLElement;
+  scrollEl = container.querySelector('.sg-grid__scroll-container') as HTMLElement;
   if (scrollEl) {
     scroller.attach(scrollEl);
   }
@@ -199,6 +303,8 @@ export function createGrid(options: GridOptions): SmartGridAPI {
   // --- Header interactions (resize + reorder) ---
 
   const headerEl = container.querySelector('.sg-grid__header') as HTMLElement | null;
+  const dragIndicatorEl = document.createElement('div');
+  dragIndicatorEl.className = 'sg-grid__drag-indicator';
 
   let reorderState:
     | {
@@ -213,9 +319,34 @@ export function createGrid(options: GridOptions): SmartGridAPI {
 
   let resizeState: { columnId: string; startX: number; startWidth: number } | null = null;
 
+
+  function showDragIndicatorAt(cell: HTMLElement): void {
+    if (!headerEl) {
+      return;
+    }
+
+    if (!dragIndicatorEl.parentElement) {
+      headerEl.appendChild(dragIndicatorEl);
+    }
+
+    const headerRect = headerEl.getBoundingClientRect();
+    const cellRect = cell.getBoundingClientRect();
+    const left = Math.max(0, Math.round(cellRect.left - headerRect.left));
+
+    dragIndicatorEl.style.left = `${left}px`;
+    dragIndicatorEl.classList.add('sg-grid__drag-indicator--visible');
+  }
+
+  function hideDragIndicator(): void {
+    dragIndicatorEl.classList.remove('sg-grid__drag-indicator--visible');
+  }
   function resizeColumnInternal(columnId: string, requestedWidth: number, emitEvent: boolean): void {
     const targetColumn = store.getState().columns.find((column) => column.id === columnId);
     if (!targetColumn) {
+      return;
+    }
+
+    if (targetColumn.fixedWidth === true || targetColumn.resizable === false) {
       return;
     }
 
@@ -320,7 +451,7 @@ export function createGrid(options: GridOptions): SmartGridAPI {
       }
 
       const column = store.getState().columns.find((candidate) => candidate.id === columnId);
-      if (!column || column.resizable === false) {
+      if (!column || column.resizable === false || column.fixedWidth === true) {
         return;
       }
 
@@ -400,6 +531,7 @@ export function createGrid(options: GridOptions): SmartGridAPI {
     clearHeaderDragClasses();
     reorderState.originCell.classList.add('sg-grid__header-cell--dragging');
     targetCell.classList.add('sg-grid__header-cell--drag-over');
+    showDragIndicatorAt(targetCell);
 
     const toRaw = targetCell.getAttribute('data-visible-col-index');
     const toVisibleIndex = toRaw ? Number.parseInt(toRaw, 10) : Number.NaN;
@@ -408,6 +540,7 @@ export function createGrid(options: GridOptions): SmartGridAPI {
 
   function onReorderMouseUp(): void {
     if (!reorderState) {
+      hideDragIndicator();
       window.removeEventListener('mousemove', onReorderMouseMove);
       window.removeEventListener('mouseup', onReorderMouseUp);
       return;
@@ -421,6 +554,7 @@ export function createGrid(options: GridOptions): SmartGridAPI {
 
     reorderState = null;
     clearHeaderDragClasses();
+    hideDragIndicator();
     document.body.style.cursor = '';
     document.body.style.userSelect = '';
 
@@ -456,7 +590,7 @@ export function createGrid(options: GridOptions): SmartGridAPI {
       event.preventDefault();
 
       const column = store.getState().columns.find((candidate) => candidate.id === columnId);
-      if (!column || column.resizable === false) {
+      if (!column || column.resizable === false || column.fixedWidth === true) {
         return;
       }
 
@@ -479,6 +613,7 @@ export function createGrid(options: GridOptions): SmartGridAPI {
     store.getState().columns,
     initialRange,
     store.getState().freeze,
+    getAvailableGridWidth(),
     scroller,
   );
   renderer.render(initialSlice);
@@ -524,6 +659,15 @@ export function createGrid(options: GridOptions): SmartGridAPI {
 
   function setConfig(patch: Partial<GridConfig>): void {
     const prevConfig = store.getState().config;
+    const nextHeightMode =
+      patch.heightMode === 'auto' || patch.heightMode === 'fixed'
+        ? patch.heightMode
+        : (prevConfig.heightMode ?? 'fixed');
+    const nextHeight =
+      typeof patch.height === 'number' && Number.isFinite(patch.height) && patch.height > 0
+        ? Math.max(80, Math.floor(patch.height))
+        : (prevConfig.height ?? 600);
+
     const nextConfig: GridConfig = {
       ...prevConfig,
       ...patch,
@@ -549,6 +693,8 @@ export function createGrid(options: GridOptions): SmartGridAPI {
         patch.overscanColumns >= 0
           ? Math.floor(patch.overscanColumns)
           : prevConfig.overscanColumns,
+      heightMode: nextHeightMode,
+      height: nextHeight,
       rowIdField: typeof patch.rowIdField === 'string' ? patch.rowIdField : prevConfig.rowIdField,
     };
 
@@ -558,6 +704,8 @@ export function createGrid(options: GridOptions): SmartGridAPI {
       nextConfig.headerHeight === prevConfig.headerHeight &&
       nextConfig.overscanRows === prevConfig.overscanRows &&
       nextConfig.overscanColumns === prevConfig.overscanColumns &&
+      nextConfig.heightMode === prevConfig.heightMode &&
+      nextConfig.height === prevConfig.height &&
       nextConfig.rowIdField === prevConfig.rowIdField
     ) {
       return;
@@ -569,6 +717,7 @@ export function createGrid(options: GridOptions): SmartGridAPI {
     // Keep renderer styling in sync
     container.style.setProperty('--sg-row-height', `${nextConfig.rowHeight}px`);
     container.style.setProperty('--sg-header-height', `${nextConfig.headerHeight}px`);
+    applyContainerHeight(nextConfig, store.getState().processedData.length);
 
     // Keep scroller calculations in sync
     scroller.setConfig({
@@ -703,6 +852,8 @@ export function createGrid(options: GridOptions): SmartGridAPI {
     }
     onResizeMouseUp();
     onReorderMouseUp();
+    hideDragIndicator();
+    dragIndicatorEl.remove();
 
     // Clean up features
     for (const feature of allFeatures) {
@@ -742,6 +893,24 @@ export function createGrid(options: GridOptions): SmartGridAPI {
   };
 }
 
+function sameRowSequence(left: ReadonlyArray<Row>, right: ReadonlyArray<Row>): boolean {
+  if (left === right) {
+    return true;
+  }
+
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  for (let i = 0; i < left.length; i++) {
+    if (left[i] !== right[i]) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 // --- Helper ---
 
 function buildVisibleSlice(
@@ -749,9 +918,13 @@ function buildVisibleSlice(
   allColumns: ReadonlyArray<ColumnDef>,
   range: ViewportRange,
   freeze: { leftCount: number; rightCount: number },
+  availableWidth: number,
   scroller: { getRowOffset: (i: number) => number; getColumnOffset: (i: number) => number },
 ): VisibleSlice {
-  const visibleColumns = allColumns.filter((c) => c.visible !== false);
+  const visibleColumns = resolveVisibleColumnsForWidth(
+    allColumns.filter((c) => c.visible !== false),
+    availableWidth,
+  );
   const allColumnWidths = visibleColumns.map((column) => column.width);
   const clampedFreeze = clampFreezeCounts(visibleColumns.length, freeze.leftCount, freeze.rightCount);
 

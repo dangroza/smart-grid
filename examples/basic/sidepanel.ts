@@ -51,6 +51,7 @@ export function mountSmartSidePanel(options: SidePanelOptions): () => void {
   target.classList.add('sg-sidepanel');
 
   let lastColumnsRef: ReadonlyArray<ColumnDef> | null = null;
+  let lastConfigRef: GridConfig | null = null;
 
   // --- DOM helpers ---
 
@@ -313,6 +314,8 @@ export function mountSmartSidePanel(options: SidePanelOptions): () => void {
   const config = readConfig();
   const rowHeightInput = makeNumberInput({ value: config.rowHeight, min: 16, max: 200, step: 1 });
   const headerHeightInput = makeNumberInput({ value: config.headerHeight, min: 24, max: 200, step: 1 });
+  const heightModeSelect = makeStringSelect(['fixed', 'auto'], config.heightMode ?? 'fixed');
+  const gridHeightInput = makeNumberInput({ value: config.height ?? 600, min: 80, max: 5000, step: 1 });
   const overscanRowsInput = makeNumberInput({ value: config.overscanRows, min: 0, max: 200, step: 1 });
   const overscanColsInput = makeNumberInput({ value: config.overscanColumns, min: 0, max: 200, step: 1 });
 
@@ -320,6 +323,8 @@ export function mountSmartSidePanel(options: SidePanelOptions): () => void {
     const patch: Partial<GridConfig> = {
       rowHeight: parsePositiveInt(rowHeightInput.value, readConfig().rowHeight),
       headerHeight: parsePositiveInt(headerHeightInput.value, readConfig().headerHeight),
+      heightMode: heightModeSelect.value === 'auto' ? 'auto' : 'fixed',
+      height: parsePositiveInt(gridHeightInput.value, readConfig().height ?? 600),
       overscanRows: Math.max(0, parsePositiveInt(overscanRowsInput.value, readConfig().overscanRows)),
       overscanColumns: Math.max(0, parsePositiveInt(overscanColsInput.value, readConfig().overscanColumns)),
     };
@@ -329,9 +334,48 @@ export function mountSmartSidePanel(options: SidePanelOptions): () => void {
 
   settingsSection.appendChild(labeledRow('Row height (px)', rowHeightInput));
   settingsSection.appendChild(labeledRow('Header height (px)', headerHeightInput));
+  settingsSection.appendChild(labeledRow('Grid height mode', heightModeSelect));
+  settingsSection.appendChild(labeledRow('Grid fixed height (px)', gridHeightInput));
   settingsSection.appendChild(labeledRow('Overscan rows', overscanRowsInput, 'Extra rows rendered above/below viewport'));
   settingsSection.appendChild(labeledRow('Overscan cols', overscanColsInput, 'Extra columns rendered left/right of viewport'));
   settingsSection.appendChild(applyConfigBtn);
+
+  // Column sizing section
+  const sizingSection = el('section', 'sg-sidepanel__section');
+  sizingSection.appendChild(el('h2', 'sg-sidepanel__section-title', 'Column Sizing'));
+
+  const sizeColumnSelect = makeStringSelect(['id'], 'id');
+  const baseWidthInput = makeNumberInput({ value: 120, min: 40, max: 1000, step: 1 });
+  const fixedWidthSelect = makeStringSelect(['false', 'true'], 'false');
+  const flexGrowInput = makeNumberInput({ value: 0, min: 0, max: 20, step: 1 });
+
+  const applySizingBtn = makeButton('Apply column sizing', () => {
+    const columnId = sizeColumnSelect.value;
+    if (!columnId) return;
+
+    const state = grid.getState();
+    const nextColumns = state.columns.map((column) => {
+      if (column.id !== columnId) return column;
+      const width = parsePositiveInt(baseWidthInput.value, column.width);
+      const fixedWidth = fixedWidthSelect.value === 'true';
+      const flexGrow = parseNonNegativeInt(flexGrowInput.value, column.flexGrow ?? 0);
+
+      return {
+        ...column,
+        width,
+        fixedWidth,
+        flexGrow,
+      } as ColumnDef;
+    });
+
+    grid.setColumns(nextColumns);
+  }, 'primary');
+
+  sizingSection.appendChild(labeledRow('Column', sizeColumnSelect));
+  sizingSection.appendChild(labeledRow('Base width (px)', baseWidthInput));
+  sizingSection.appendChild(labeledRow('Fixed width', fixedWidthSelect));
+  sizingSection.appendChild(labeledRow('Fill weight (flexGrow)', flexGrowInput, '0 means no fill behavior'));
+  sizingSection.appendChild(applySizingBtn);
 
   // Freeze section
   const freezeSection = el('section', 'sg-sidepanel__section');
@@ -511,6 +555,7 @@ export function mountSmartSidePanel(options: SidePanelOptions): () => void {
   content.appendChild(datasetSection);
   content.appendChild(columnsSection);
   content.appendChild(settingsSection);
+  content.appendChild(sizingSection);
   content.appendChild(freezeSection);
   content.appendChild(sortSection);
   content.appendChild(filterSection);
@@ -536,8 +581,24 @@ export function mountSmartSidePanel(options: SidePanelOptions): () => void {
   function syncConfigInputs(nextConfig: GridConfig): void {
     rowHeightInput.value = String(nextConfig.rowHeight);
     headerHeightInput.value = String(nextConfig.headerHeight);
+    heightModeSelect.value = nextConfig.heightMode ?? 'fixed';
+    gridHeightInput.value = String(nextConfig.height ?? 600);
     overscanRowsInput.value = String(nextConfig.overscanRows);
     overscanColsInput.value = String(nextConfig.overscanColumns);
+  }
+
+  function syncColumnSizingUI(): void {
+    const state = grid.getState();
+    const options = state.columns.map((column) => ({ value: column.id, label: `${column.header} (${column.id})` }));
+    setSelectOptions(sizeColumnSelect, options.length > 0 ? options : [{ value: '', label: '—' }]);
+
+    const selected = state.columns.find((column) => column.id === sizeColumnSelect.value) ?? state.columns[0];
+    if (!selected) return;
+
+    sizeColumnSelect.value = selected.id;
+    baseWidthInput.value = String(selected.width);
+    fixedWidthSelect.value = selected.fixedWidth ? 'true' : 'false';
+    flexGrowInput.value = String(selected.flexGrow ?? 0);
   }
 
   function syncPaginationUI(): void {
@@ -641,6 +702,8 @@ export function mountSmartSidePanel(options: SidePanelOptions): () => void {
   // Initial render
   updateSummary();
   renderColumnsList(grid.getState().columns);
+  lastConfigRef = grid.getState().config;
+  syncColumnSizingUI();
   syncFreezeUI();
   syncPaginationUI();
   syncSortFilterUI();
@@ -652,10 +715,14 @@ export function mountSmartSidePanel(options: SidePanelOptions): () => void {
     if (lastColumnsRef !== state.columns) {
       lastColumnsRef = state.columns;
       renderColumnsList(state.columns);
+      syncColumnSizingUI();
     }
 
-    // Keep config inputs synced if config changes elsewhere
-    syncConfigInputs(state.config);
+    // Keep config inputs synced only when config changes elsewhere
+    if (lastConfigRef !== state.config) {
+      lastConfigRef = state.config;
+      syncConfigInputs(state.config);
+    }
     syncFreezeUI();
     syncPaginationUI();
     syncSortFilterUI();

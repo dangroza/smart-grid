@@ -125,6 +125,24 @@
   background: color-mix(in srgb, var(--sg-header-bg), #8ea6b6 12%);
 }
 
+.sg-grid__drag-indicator {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: #8ea6b6;
+  box-shadow: 0 0 0 1px #ffffff;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 6;
+  transition: opacity 80ms linear;
+}
+
+.sg-grid__drag-indicator--visible {
+  opacity: 1;
+}
+
 .sg-grid__header-cell:focus-visible {
   outline: none;
   box-shadow: inset var(--sg-focus-ring);

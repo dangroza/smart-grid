@@ -16,6 +16,8 @@ import type {
 const DEFAULT_CONFIG: GridConfig = {
   rowHeight: 40,
   headerHeight: 44,
+  heightMode: 'fixed',
+  height: 600,
   overscanRows: 10,
   overscanColumns: 5,
   rowIdField: 'id',

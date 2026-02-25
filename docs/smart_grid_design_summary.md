@@ -1,7 +1,7 @@
 # Smart Grid — Design Summary
 
-**Date:** February 17, 2026  
-**Status:** Implementation In Progress — Stage 1 complete, Stage 2 started  
+**Date:** February 25, 2026  
+**Status:** Implementation In Progress — Stage 1 complete, Stage 2 substantially advanced  
 
 ---
 
@@ -46,13 +46,56 @@ Features (sort, filter, resize, etc.) are self-contained modules that plug into 
 | **3 — Advanced** | Freeze, Grouping, Row expansion, Computed columns, Totals, Infinite scroll | Complex features on solid foundation |
 | **4 — Production** | Full a11y, i18n, Config persistence, npm packaging, Docs, CI/CD | Publishable package |
 
-## Current Progress Snapshot (February 17, 2026)
+## Current Progress Snapshot (February 25, 2026)
 
 - **Stage 1 Foundation:** Implemented in `packages/core/src` (store, event bus, pipeline, virtual scroller, DOM renderer, grid orchestrator, CSS).
-- **Example app:** 50K × 50 demo in `examples/basic`.
-- **Stage 2 started:** Sort feature implemented (`features/sort/sort-feature.ts`) and wired into orchestrator.
-- **Tests:** Vitest suite currently passing.
-- **Open:** filter/pagination/selection/resize/reorder and production hardening (a11y/i18n/packaging/license automation).
+- **Example app:** 50K × 50 demo in `examples/basic` with advanced side panel controls.
+- **Stage 2 implemented features:** sorting, filtering, pagination, column resize, column reorder, left/right freeze, fixed/fill column sizing, height mode (`auto`/`fixed`).
+- **Tests:** Vitest suite passing (unit + integration coverage for core pipeline/features).
+- **Open:** selection, keyboard/a11y hardening depth, advanced stage features, packaging/license automation.
+
+## Available Features & Configuration
+
+### Initialization (`createGrid(options)`)
+
+- **Data/columns:** `data`, `columns`
+- **View config:** `rowHeight`, `headerHeight`, `overscanRows`, `overscanColumns`, `rowIdField`, `height`
+	- `height` supports numeric fixed height or `'auto'`
+- **Initial feature state:**
+	- `initialSort`
+	- `initialFilter`, `initialFilterMode`
+	- `initialPagination`
+	- `initialFreeze`
+- **Extensibility:** `features` (feature modules)
+
+### Runtime API (`SmartGridAPI`)
+
+- **Dataset/columns/config:** `setData`, `setColumns`, `setConfig`
+- **Sort/filter/pagination:** `setSort`/`clearSort`, `setFilter`/`clearFilter`, `setPagination`/`clearPagination`
+- **Freeze:** `setFrozenColumns`, `freezeLeftTo`, `freezeRightFrom`, `clearFreeze`
+- **Columns:** `resizeColumn`, `reorderColumn`
+- **Navigation/lifecycle:** `scrollTo`, `destroy`
+
+### Column sizing model
+
+- **Base width:** `width`
+- **Fixed columns:** `fixedWidth: true` (excluded from fill-width distribution)
+- **Fill columns:** `flexGrow > 0` (receives proportional remaining width)
+- **Resize constraints:** `minWidth`/`maxWidth`, `resizable`
+
+### Example side panel coverage
+
+The example side panel exposes runtime controls for:
+
+- Dataset size and column count
+- Column visibility
+- Grid dimensions and overscan
+- Height mode + fixed height
+- Column sizing (`width`, `fixedWidth`, `flexGrow`)
+- Freeze left/right boundaries
+- Sort criteria
+- Filter mode and criteria
+- Pagination page/page size
 
 ## Performance Targets
 
