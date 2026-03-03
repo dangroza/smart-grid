@@ -40,6 +40,12 @@ const grid = createGrid({
   initialFilterMode: INITIAL_FILTER_MODE,
   initialPagination: INITIAL_PAGINATION,
   initialFreeze: INITIAL_FREEZE,
+  selectionColumn: {
+    enabled: true,
+    id: '__select',
+    width: 132,
+    header: 'Select',
+  },
   config: {
     height: typeof INITIAL_HEIGHT === 'number' ? INITIAL_HEIGHT : 620,
     heightMode: INITIAL_HEIGHT_MODE,

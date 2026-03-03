@@ -44,6 +44,7 @@ function createMockState(input: {
     },
     freeze: { leftCount: 0, rightCount: 0 },
     grouping: { columnIds: input.groupingColumnIds ?? [], collapsedKeys: new Set() },
+    totals: { mode: 'off', label: 'Totals' },
     config: {
       rowHeight: 40,
       headerHeight: 44,

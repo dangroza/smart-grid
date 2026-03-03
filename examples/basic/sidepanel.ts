@@ -413,6 +413,34 @@ export function mountSmartSidePanel(options: SidePanelOptions): () => void {
   freezeSection.appendChild(freezeToolbar);
   freezeSection.appendChild(freezeInfo);
 
+  // Selection section
+  const selectionSection = el('section', 'sg-sidepanel__section');
+  selectionSection.appendChild(el('h2', 'sg-sidepanel__section-title', 'Selection'));
+
+  const selectionToolbar = el('div', 'sg-sidepanel__toolbar');
+  const selectionInfo = el('div', 'sg-sidepanel__hint', '');
+  const selectionList = el('div', 'sg-sidepanel__hint', '');
+
+  const selectAllBtn = makeButton('Select visible', () => {
+    grid.selectAll();
+  }, 'primary');
+
+  const selectAllPagesBtn = makeButton('Select all pages', () => {
+    grid.selectAllPages();
+  });
+
+  const clearSelectionBtn = makeButton('Clear', () => {
+    grid.clearSelection();
+  });
+
+  selectionToolbar.appendChild(selectAllBtn);
+  selectionToolbar.appendChild(selectAllPagesBtn);
+  selectionToolbar.appendChild(clearSelectionBtn);
+
+  selectionSection.appendChild(selectionToolbar);
+  selectionSection.appendChild(selectionInfo);
+  selectionSection.appendChild(selectionList);
+
   // Grouping section
   const groupingSection = el('section', 'sg-sidepanel__section');
   groupingSection.appendChild(el('h2', 'sg-sidepanel__section-title', 'Grouping'));
@@ -585,6 +613,7 @@ export function mountSmartSidePanel(options: SidePanelOptions): () => void {
   content.appendChild(settingsSection);
   content.appendChild(sizingSection);
   content.appendChild(freezeSection);
+  content.appendChild(selectionSection);
   content.appendChild(groupingSection);
   content.appendChild(sortSection);
   content.appendChild(filterSection);
@@ -748,12 +777,29 @@ export function mountSmartSidePanel(options: SidePanelOptions): () => void {
       `frozen right: ${state.freeze.rightCount.toLocaleString()}`;
   }
 
+  function syncSelectionUI(): void {
+    const state = grid.getState();
+    const ids = [...state.selection.selectedIds];
+    const totalSelected = ids.length;
+
+    selectionInfo.textContent =
+      totalSelected > 0
+        ? `${totalSelected.toLocaleString()} row(s) selected`
+        : 'No selected rows';
+
+    const preview = ids.slice(0, 8).map((id) => String(id));
+    const suffix = ids.length > preview.length ? ' …' : '';
+    selectionList.textContent =
+      preview.length > 0 ? `IDs: ${preview.join(', ')}${suffix}` : 'Tip: click a row to select';
+  }
+
   // Initial render
   updateSummary();
   renderColumnsList(grid.getState().columns);
   lastConfigRef = grid.getState().config;
   syncColumnSizingUI();
   syncFreezeUI();
+  syncSelectionUI();
   syncGroupingUI();
   syncPaginationUI();
   syncSortFilterUI();
@@ -774,6 +820,7 @@ export function mountSmartSidePanel(options: SidePanelOptions): () => void {
       syncConfigInputs(state.config);
     }
     syncFreezeUI();
+    syncSelectionUI();
     syncGroupingUI();
     syncPaginationUI();
     syncSortFilterUI();

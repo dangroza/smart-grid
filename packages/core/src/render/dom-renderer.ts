@@ -8,6 +8,7 @@ import type {
   ColumnDef,
   ColumnId,
   DOMRenderer,
+  RowId,
   Row,
   VisibleSlice,
 } from '../types';
@@ -20,6 +21,7 @@ import {
   GROUP_ROW_LEVEL_FIELD,
   isGroupRow,
 } from '../features/grouping/grouping-row';
+import { isTotalsRow } from '../features/totals/totals-row';
 import { createCellRendererRegistry } from './cell-renderer';
 import { applyCellContent, createElement, setCSSVar } from './dom-utils';
 
@@ -78,6 +80,11 @@ export function createDOMRenderer(): DOMRenderer {
     const {
       rows,
       columns,
+      rowIdField,
+      selectedRowIds,
+      pageSelectableRowIds,
+      allSelectableRowIds,
+      selectionColumnId,
       columnIndexes,
       allColumnWidths,
       leftFrozenCount,
@@ -90,10 +97,11 @@ export function createDOMRenderer(): DOMRenderer {
     const visibleRowCount = range.endRow - range.startRow;
     const visibleColCount = columns.length;
     const totalVisibleCols = allColumnWidths.length;
+    const totalDataCols = selectionColumnId !== null ? Math.max(0, totalVisibleCols - 1) : totalVisibleCols;
 
     // Update ARIA counts
     container.setAttribute('aria-rowcount', String(totalRows));
-    container.setAttribute('aria-colcount', String(totalVisibleCols));
+    container.setAttribute('aria-colcount', String(totalDataCols));
 
     // Update spacer to set total scrollable area
     const rowHeight = parseInt(
@@ -114,6 +122,10 @@ export function createDOMRenderer(): DOMRenderer {
       rightFrozenCount,
       columnOffset,
       headerHeight,
+      selectedRowIds,
+      pageSelectableRowIds,
+      allSelectableRowIds,
+      selectionColumnId,
     );
 
     // Ensure we have enough row elements in the pool
@@ -129,6 +141,7 @@ export function createDOMRenderer(): DOMRenderer {
       const cells = cellPool.get(rowEl)!;
       const absoluteRowIndex = range.startRow + ri;
       const isGroup = !!row && isGroupRow(row);
+      const isTotals = !!row && isTotalsRow(row);
 
       // Show this row element
       rowEl.style.display = '';
@@ -138,6 +151,13 @@ export function createDOMRenderer(): DOMRenderer {
       rowEl.classList.toggle('sg-grid__row--even', absoluteRowIndex % 2 === 0);
       rowEl.classList.toggle('sg-grid__row--odd', absoluteRowIndex % 2 !== 0);
       rowEl.classList.toggle('sg-grid__row--group', isGroup);
+      rowEl.classList.toggle('sg-grid__row--totals', isTotals);
+      rowEl.setAttribute('data-row-index', String(absoluteRowIndex));
+
+      const rowId = getRowIdValue(row, rowIdField);
+      const selected = rowId !== null && selectedRowIds.has(rowId);
+      rowEl.classList.toggle('sg-grid__row--selected', selected);
+      rowEl.setAttribute('aria-selected', selected ? 'true' : 'false');
 
       // Update cells
       for (let ci = 0; ci < visibleColCount; ci++) {
@@ -148,12 +168,15 @@ export function createDOMRenderer(): DOMRenderer {
         cellEl.style.display = '';
 
         if (row && col) {
+          const isSelectionColumn = selectionColumnId !== null && col.id === selectionColumnId;
           if (isGroup) {
             if (ci === 0) {
               applyCellContent(cellEl, renderGroupCellContent(row, col));
             } else {
               applyCellContent(cellEl, '');
             }
+          } else if (isSelectionColumn) {
+            applyCellContent(cellEl, renderSelectionCellContent(absoluteRowIndex, row, rowIdField, selectedRowIds));
           } else {
             const value = row[col.field];
             const content = cellRenderers.renderCell(value, row, col);
@@ -206,6 +229,10 @@ export function createDOMRenderer(): DOMRenderer {
     rightFrozenCount: number,
     columnOffset: number,
     _headerHeight: number,
+    selectedRowIds: ReadonlySet<RowId>,
+    pageSelectableRowIds: ReadonlySet<RowId>,
+    allSelectableRowIds: ReadonlySet<RowId>,
+    selectionColumnId: string | null,
   ): void {
     if (!headerContainer || !scrollContainer) return;
 
@@ -236,7 +263,16 @@ export function createDOMRenderer(): DOMRenderer {
       if (col) {
         const label = cell.querySelector('.sg-grid__header-label') as HTMLElement | null;
         if (label) {
-          label.textContent = col.header;
+          if (selectionColumnId !== null && col.id === selectionColumnId) {
+            renderSelectionHeaderContent(label, selectedRowIds, pageSelectableRowIds, allSelectableRowIds);
+          } else {
+            label.textContent = col.header;
+          }
+        }
+
+        const resizeHandle = cell.querySelector('.sg-grid__header-resize-handle') as HTMLElement | null;
+        if (resizeHandle) {
+          resizeHandle.style.display = selectionColumnId !== null && col.id === selectionColumnId ? 'none' : '';
         }
 
         const colAbsoluteIndex = columnIndexes[ci] ?? 0;
@@ -266,6 +302,7 @@ export function createDOMRenderer(): DOMRenderer {
           'sg-grid__header-cell--frozen-right',
           colAbsoluteIndex >= totalVisibleCols - rightFrozenCount,
         );
+        cell.classList.toggle('sg-grid__header-cell--selection', selectionColumnId !== null && col.id === selectionColumnId);
       }
     }
 
@@ -336,6 +373,15 @@ export function createDOMRenderer(): DOMRenderer {
     }
   }
 
+  function getRowIdValue(row: Row | undefined, rowIdField: string): RowId | null {
+    if (!row || isGroupRow(row)) {
+      return null;
+    }
+
+    const value = row[rowIdField];
+    return typeof value === 'string' || typeof value === 'number' ? value : null;
+  }
+
   function renderGroupCellContent(row: Row, column: ColumnDef): HTMLElement {
     const wrapper = createElement('div', 'sg-grid__group-cell');
     const button = document.createElement('button');
@@ -375,6 +421,105 @@ export function createDOMRenderer(): DOMRenderer {
     wrapper.appendChild(button);
 
     return wrapper;
+  }
+
+  function renderSelectionHeaderContent(
+    host: HTMLElement,
+    selectedRowIds: ReadonlySet<RowId>,
+    pageSelectableRowIds: ReadonlySet<RowId>,
+    allSelectableRowIds: ReadonlySet<RowId>,
+  ): void {
+    let root = host.querySelector('.sg-grid__selection-header') as HTMLElement | null;
+    let checkbox = host.querySelector('.sg-grid__selection-header-checkbox') as HTMLInputElement | null;
+    let actionSelect = host.querySelector('.sg-grid__selection-header-dropdown') as HTMLSelectElement | null;
+
+    if (!root || !checkbox || !actionSelect) {
+      host.textContent = '';
+      root = createElement('div', 'sg-grid__selection-header');
+
+      checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'sg-grid__selection-header-checkbox';
+
+      actionSelect = document.createElement('select');
+      actionSelect.className = 'sg-grid__selection-header-dropdown';
+
+      const options: Array<{ value: string; label: string }> = [
+        { value: '', label: 'Actions' },
+        { value: 'select-page', label: 'Select all' },
+        { value: 'select-all-pages', label: 'Select all pages' },
+        { value: 'clear', label: 'Select none' },
+      ];
+
+      for (const optionData of options) {
+        const option = document.createElement('option');
+        option.value = optionData.value;
+        option.textContent = optionData.label;
+        actionSelect.appendChild(option);
+      }
+
+      root.appendChild(checkbox);
+      root.appendChild(actionSelect);
+      host.appendChild(root);
+    }
+
+    const pageSelectedCount = countIntersection(selectedRowIds, pageSelectableRowIds);
+    const pageTotal = pageSelectableRowIds.size;
+    const allSelectedCount = countIntersection(selectedRowIds, allSelectableRowIds);
+    const allTotal = allSelectableRowIds.size;
+
+    checkbox.checked = pageTotal > 0 && pageSelectedCount === pageTotal;
+    checkbox.indeterminate = pageSelectedCount > 0 && pageSelectedCount < pageTotal;
+    checkbox.title = `Selected ${pageSelectedCount}/${pageTotal} on page`;
+
+    actionSelect.disabled = pageTotal === 0 && allTotal === 0;
+    actionSelect.title =
+      `Page: ${pageSelectedCount}/${pageTotal} selected · ` +
+      `All pages: ${allSelectedCount}/${allTotal} selected`;
+
+    const selectPageOption = actionSelect.querySelector('option[value="select-page"]') as HTMLOptionElement | null;
+    const selectAllPagesOption = actionSelect.querySelector('option[value="select-all-pages"]') as HTMLOptionElement | null;
+    const clearOption = actionSelect.querySelector('option[value="clear"]') as HTMLOptionElement | null;
+
+    if (selectPageOption) {
+      selectPageOption.disabled = pageTotal === 0 || pageSelectedCount === pageTotal;
+    }
+    if (selectAllPagesOption) {
+      selectAllPagesOption.disabled = allTotal === 0 || allSelectedCount === allTotal;
+    }
+    if (clearOption) {
+      clearOption.disabled = selectedRowIds.size === 0;
+    }
+  }
+
+  function renderSelectionCellContent(
+    absoluteRowIndex: number,
+    row: Row,
+    rowIdField: string,
+    selectedRowIds: ReadonlySet<RowId>,
+  ): HTMLElement {
+    const wrapper = createElement('div', 'sg-grid__selection-cell');
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.className = 'sg-grid__selection-row-checkbox';
+    checkbox.setAttribute('data-row-index', String(absoluteRowIndex));
+
+    const rowId = getRowIdValue(row, rowIdField);
+    checkbox.checked = rowId !== null && selectedRowIds.has(rowId);
+    checkbox.disabled = rowId === null;
+
+    wrapper.appendChild(checkbox);
+    return wrapper;
+  }
+
+  function countIntersection(left: ReadonlySet<RowId>, right: ReadonlySet<RowId>): number {
+    let count = 0;
+    for (const value of left) {
+      if (right.has(value)) {
+        count++;
+      }
+    }
+    return count;
   }
 
   function setCellRenderer(columnId: ColumnId, renderer: CellRendererFn): void {

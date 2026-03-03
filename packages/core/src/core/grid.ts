@@ -6,6 +6,7 @@
 import type {
   FilterCriterion,
   FilterMode,
+  RowId,
   SortCriterion,
   ColumnDef,
   GridConfig,
@@ -26,7 +27,16 @@ import { buildFrozenRenderColumnIndexes, clampFreezeCounts } from '../features/f
 import { createFilterFeature } from '../features/filter/filter-feature';
 import { createGroupingFeature } from '../features/grouping/grouping-feature';
 import { createPaginationFeature } from '../features/pagination/pagination-feature';
+import {
+  collectSelectableRowIds,
+  computeAllSelected,
+  getRowId,
+  normalizeSelection,
+} from '../features/selection/selection-utils';
 import { createSortFeature } from '../features/sort/sort-feature';
+import { createTotalsFeature } from '../features/totals/totals-feature';
+
+const DEFAULT_SELECTION_COLUMN_ID = '__sg_selection';
 
 /**
  * Creates a Smart Grid instance.
@@ -55,6 +65,8 @@ export function createGrid(options: GridOptions): SmartGridAPI {
     overscanRows: overscanRowsOption = 10,
     overscanColumns: overscanColumnsOption = 5,
     rowIdField: rowIdFieldOption = 'id',
+    selectionColumn,
+    initialTotals,
     features = [],
   } = options;
 
@@ -63,6 +75,13 @@ export function createGrid(options: GridOptions): SmartGridAPI {
   const overscanRows = configOption?.overscanRows ?? overscanRowsOption;
   const overscanColumns = configOption?.overscanColumns ?? overscanColumnsOption;
   const rowIdField = configOption?.rowIdField ?? rowIdFieldOption;
+  const selectionColumnEnabled = selectionColumn?.enabled === true;
+  const selectionColumnId = selectionColumn?.id ?? DEFAULT_SELECTION_COLUMN_ID;
+  const selectionColumnHeader = selectionColumn?.header ?? '';
+  const selectionColumnWidth =
+    typeof selectionColumn?.width === 'number' && Number.isFinite(selectionColumn.width)
+      ? Math.max(56, Math.floor(selectionColumn.width))
+      : 120;
   const heightModeOption = configOption?.heightMode ?? (height === 'auto' ? 'auto' : 'fixed');
   const heightValueOption =
     typeof configOption?.height === 'number'
@@ -76,6 +95,7 @@ export function createGrid(options: GridOptions): SmartGridAPI {
     createSortFeature(),
     createGroupingFeature(),
     createPaginationFeature(),
+    createTotalsFeature(),
     ...features,
   ];
 
@@ -109,6 +129,8 @@ export function createGrid(options: GridOptions): SmartGridAPI {
 
   const renderer = createDOMRenderer();
   let scrollEl: HTMLElement | null = null;
+  let pageSelectableRowIds: ReadonlySet<RowId> = new Set();
+  let allSelectableRowIds: ReadonlySet<RowId> = new Set();
 
   const initialPageSize =
     initialPagination && typeof initialPagination.pageSize === 'number'
@@ -163,6 +185,10 @@ export function createGrid(options: GridOptions): SmartGridAPI {
         columnIds: initialGroupingColumnIds,
         collapsedKeys: new Set(),
       },
+      totals: {
+        mode: initialTotals?.mode ?? 'off',
+        label: initialTotals?.label ?? 'Totals',
+      },
     }));
   });
 
@@ -172,6 +198,32 @@ export function createGrid(options: GridOptions): SmartGridAPI {
 
   function getAvailableGridWidth(): number {
     return scrollEl?.clientWidth ?? container.clientWidth;
+  }
+
+  function getRenderColumns(columnsInput: ReadonlyArray<ColumnDef>): ReadonlyArray<ColumnDef> {
+    const visibleColumns = columnsInput.filter((column) => column.visible !== false);
+    if (!selectionColumnEnabled) {
+      return visibleColumns;
+    }
+
+    if (visibleColumns.some((column) => column.id === selectionColumnId)) {
+      return visibleColumns;
+    }
+
+    const selectionDef: ColumnDef = {
+      id: selectionColumnId,
+      field: selectionColumnId,
+      header: selectionColumnHeader,
+      width: selectionColumnWidth,
+      fixedWidth: true,
+      resizable: false,
+      sortable: false,
+      filterable: false,
+      groupable: false,
+      visible: true,
+    };
+
+    return [selectionDef, ...visibleColumns];
   }
 
   function applyContainerHeight(config: GridConfig, totalRows: number): void {
@@ -196,10 +248,12 @@ export function createGrid(options: GridOptions): SmartGridAPI {
   // --- Wire scroller to renderer ---
 
   const columnWidths = resolveVisibleColumnsForWidth(
-    columns.filter((c) => c.visible !== false),
+    getRenderColumns(columns),
     getAvailableGridWidth(),
   ).map((c) => c.width);
   scroller.setDimensions(data.length, columnWidths);
+  allSelectableRowIds = collectSelectableRowIds(store.getState().data, rowIdField);
+  pageSelectableRowIds = collectSelectableRowIds(store.getState().processedData, rowIdField);
 
   // Scroller drives rendering
   const unsubRange = scroller.onRangeChanged((range: ViewportRange) => {
@@ -218,9 +272,15 @@ export function createGrid(options: GridOptions): SmartGridAPI {
     const slice = buildVisibleSlice(
       state.processedData,
       state.columns,
+      state.selection,
+      state.config.rowIdField,
+      pageSelectableRowIds,
+      allSelectableRowIds,
+      selectionColumnEnabled ? selectionColumnId : null,
       range,
       state.freeze,
       getAvailableGridWidth(),
+      getRenderColumns,
       scroller,
     );
     eventBus.emit('render:before', undefined);
@@ -245,6 +305,28 @@ export function createGrid(options: GridOptions): SmartGridAPI {
         : state;
     const unpaginated = pipeline.process(state.data, unpaginatedState);
     const derivedTotalRows = unpaginated.length;
+    allSelectableRowIds = collectSelectableRowIds(unpaginated, state.config.rowIdField);
+
+    const normalizedSelectionCandidate = normalizeSelection(
+      [...state.selection.selectedIds],
+      allSelectableRowIds,
+    );
+    const selectionChanged = !sameSetValues(normalizedSelectionCandidate, state.selection.selectedIds);
+    const normalizedSelection = selectionChanged
+      ? normalizedSelectionCandidate
+      : state.selection.selectedIds;
+    const derivedAllSelected = computeAllSelected(normalizedSelection, allSelectableRowIds);
+
+    if (selectionChanged || derivedAllSelected !== state.selection.allSelected) {
+      store.update((prev) => ({
+        ...prev,
+        selection: {
+          selectedIds: normalizedSelection,
+          allSelected: derivedAllSelected,
+        },
+      }));
+      return;
+    }
 
     const maxPage =
       state.pagination.pageSize > 0
@@ -266,6 +348,7 @@ export function createGrid(options: GridOptions): SmartGridAPI {
 
     // Run full pipeline with current pagination state.
     const processed = pipeline.process(state.data, state);
+    pageSelectableRowIds = collectSelectableRowIds(processed, state.config.rowIdField);
 
     // Update processedData if it changed
     if (processed !== state.processedData && !sameRowSequence(processed, state.processedData)) {
@@ -274,7 +357,7 @@ export function createGrid(options: GridOptions): SmartGridAPI {
     }
 
     // Update scroller dimensions
-    const visibleColumns = state.columns.filter((c) => c.visible !== false);
+    const visibleColumns = getRenderColumns(state.columns);
     const widths = resolveVisibleColumnsForWidth(visibleColumns, getAvailableGridWidth()).map((c) => c.width);
     scroller.setDimensions(processed.length, widths);
 
@@ -286,9 +369,15 @@ export function createGrid(options: GridOptions): SmartGridAPI {
     const slice = buildVisibleSlice(
       state.processedData,
       state.columns,
+      state.selection,
+      state.config.rowIdField,
+      pageSelectableRowIds,
+      allSelectableRowIds,
+      selectionColumnEnabled ? selectionColumnId : null,
       currentRange,
       state.freeze,
       getAvailableGridWidth(),
+      getRenderColumns,
       scroller,
     );
     eventBus.emit('render:before', undefined);
@@ -455,6 +544,14 @@ export function createGrid(options: GridOptions): SmartGridAPI {
       return;
     }
 
+    if (
+      target.closest('.sg-grid__selection-header') ||
+      target.closest('.sg-grid__selection-header-checkbox') ||
+      target.closest('.sg-grid__selection-header-dropdown')
+    ) {
+      return;
+    }
+
     const resizeHandle = target.closest('.sg-grid__header-resize-handle') as HTMLElement | null;
     if (resizeHandle) {
       const cell = resizeHandle.closest('.sg-grid__header-cell') as HTMLElement | null;
@@ -492,6 +589,11 @@ export function createGrid(options: GridOptions): SmartGridAPI {
     const indexRaw = cell.getAttribute('data-visible-col-index');
     const index = indexRaw ? Number.parseInt(indexRaw, 10) : Number.NaN;
     if (!Number.isFinite(index)) {
+      return;
+    }
+
+    const columnId = cell.getAttribute('data-column-id');
+    if (columnId === selectionColumnId) {
       return;
     }
 
@@ -590,6 +692,10 @@ export function createGrid(options: GridOptions): SmartGridAPI {
       return;
     }
 
+    if (columnId === selectionColumnId) {
+      return;
+    }
+
     // Reorder: Alt + Shift + ArrowLeft/ArrowRight
     if (event.altKey && event.shiftKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
       event.preventDefault();
@@ -624,9 +730,15 @@ export function createGrid(options: GridOptions): SmartGridAPI {
   const initialSlice = buildVisibleSlice(
     store.getState().processedData,
     store.getState().columns,
+    store.getState().selection,
+    store.getState().config.rowIdField,
+    pageSelectableRowIds,
+    allSelectableRowIds,
+    selectionColumnEnabled ? selectionColumnId : null,
     initialRange,
     store.getState().freeze,
     getAvailableGridWidth(),
+    getRenderColumns,
     scroller,
   );
   renderer.render(initialSlice);
@@ -652,6 +764,16 @@ export function createGrid(options: GridOptions): SmartGridAPI {
       store.update((prev) => ({
         ...prev,
         data: newData,
+      }));
+      store.update((prev) => ({
+        ...prev,
+        selection: {
+          selectedIds: normalizeSelection(
+            [...prev.selection.selectedIds],
+            collectSelectableRowIds(newData, prev.config.rowIdField),
+          ),
+          allSelected: false,
+        },
       }));
     });
     eventBus.emit('data:set', { data: newData });
@@ -892,6 +1014,97 @@ export function createGrid(options: GridOptions): SmartGridAPI {
     eventBus.emit('grouping:changed', { columnIds: grouping.columnIds, collapsedKeys: nextCollapsed });
   }
 
+  function setTotals(mode: 'off' | 'page' | 'allPages', label?: string): void {
+    const nextMode = mode;
+    const nextLabel = label && label.trim().length > 0 ? label.trim() : store.getState().totals.label;
+
+    store.update((prev) => ({
+      ...prev,
+      totals: {
+        mode: nextMode,
+        label: nextLabel,
+      },
+    }));
+
+    eventBus.emit('totals:changed', { mode: nextMode, label: nextLabel });
+  }
+
+  function clearTotals(): void {
+    setTotals('off');
+  }
+
+  function setSelection(rowIds: ReadonlyArray<RowId>): void {
+    const selectedIds = normalizeSelection(rowIds, allSelectableRowIds);
+    const allSelected = computeAllSelected(selectedIds, allSelectableRowIds);
+
+    const current = store.getState().selection;
+    if (sameSetValues(selectedIds, current.selectedIds) && allSelected === current.allSelected) {
+      return;
+    }
+
+    store.update((prev) => ({
+      ...prev,
+      selection: {
+        selectedIds,
+        allSelected,
+      },
+    }));
+
+    eventBus.emit('selection:changed', { selectedIds, allSelected });
+  }
+
+  function selectRow(rowId: RowId): void {
+    const current = store.getState().selection.selectedIds;
+    if (current.has(rowId)) {
+      return;
+    }
+
+    setSelection([...current, rowId]);
+  }
+
+  function deselectRow(rowId: RowId): void {
+    const current = store.getState().selection.selectedIds;
+    if (!current.has(rowId)) {
+      return;
+    }
+
+    setSelection([...current].filter((candidate) => candidate !== rowId));
+  }
+
+  function toggleRowSelection(rowId: RowId): void {
+    if (store.getState().selection.selectedIds.has(rowId)) {
+      deselectRow(rowId);
+      return;
+    }
+
+    selectRow(rowId);
+  }
+
+  function selectAll(): void {
+    const current = store.getState().selection.selectedIds;
+    const next = new Set(current);
+    for (const rowId of pageSelectableRowIds) {
+      next.add(rowId);
+    }
+    setSelection([...next]);
+  }
+
+  function selectAllPages(): void {
+    setSelection([...allSelectableRowIds]);
+  }
+
+  function clearSelection(): void {
+    setSelection([]);
+  }
+
+  function clearCurrentPageSelection(): void {
+    const current = new Set(store.getState().selection.selectedIds);
+    for (const rowId of pageSelectableRowIds) {
+      current.delete(rowId);
+    }
+    setSelection([...current]);
+  }
+
   function resizeColumn(columnId: string, width: number): void {
     resizeColumnInternal(columnId, width, true);
   }
@@ -948,8 +1161,120 @@ export function createGrid(options: GridOptions): SmartGridAPI {
     toggleGroup(groupKey);
   }
 
+  function onRowClick(event: MouseEvent): void {
+    const target = event.target as HTMLElement | null;
+    if (!target) {
+      return;
+    }
+
+    if (target.closest('.sg-grid__group-toggle')) {
+      return;
+    }
+
+    if (
+      target.closest('.sg-grid__selection-row-checkbox') ||
+      target.closest('.sg-grid__selection-header-checkbox') ||
+      target.closest('.sg-grid__selection-header-dropdown')
+    ) {
+      return;
+    }
+
+    const rowEl = target.closest('.sg-grid__row') as HTMLElement | null;
+    if (!rowEl) {
+      return;
+    }
+
+    const rowIndexRaw = rowEl.getAttribute('data-row-index');
+    const rowIndex = rowIndexRaw ? Number.parseInt(rowIndexRaw, 10) : Number.NaN;
+    if (!Number.isFinite(rowIndex)) {
+      return;
+    }
+
+    const state = store.getState();
+    const row = state.processedData[rowIndex];
+    if (!row) {
+      return;
+    }
+
+    const rowId = getRowId(row, state.config.rowIdField);
+    if (rowId === null) {
+      return;
+    }
+
+    if (event.metaKey || event.ctrlKey) {
+      toggleRowSelection(rowId);
+      return;
+    }
+
+    setSelection([rowId]);
+  }
+
+  function onSelectionCheckboxChange(event: Event): void {
+    const target = event.target as HTMLElement | null;
+    if (!(target instanceof HTMLInputElement)) {
+      const selectTarget = event.target as HTMLElement | null;
+      if (!(selectTarget instanceof HTMLSelectElement)) {
+        return;
+      }
+
+      if (!selectTarget.classList.contains('sg-grid__selection-header-dropdown')) {
+        return;
+      }
+
+      const action = selectTarget.value;
+      if (action === 'select-page') {
+        selectAll();
+      } else if (action === 'select-all-pages') {
+        selectAllPages();
+      } else if (action === 'clear') {
+        clearSelection();
+      }
+
+      selectTarget.value = '';
+      return;
+    }
+
+    if (target.classList.contains('sg-grid__selection-header-checkbox')) {
+      if (target.checked) {
+        selectAll();
+      } else {
+        clearCurrentPageSelection();
+      }
+      return;
+    }
+
+    if (!target.classList.contains('sg-grid__selection-row-checkbox')) {
+      return;
+    }
+
+    const rowIndexRaw = target.getAttribute('data-row-index');
+    const rowIndex = rowIndexRaw ? Number.parseInt(rowIndexRaw, 10) : Number.NaN;
+    if (!Number.isFinite(rowIndex)) {
+      return;
+    }
+
+    const state = store.getState();
+    const row = state.processedData[rowIndex];
+    if (!row) {
+      return;
+    }
+
+    const rowId = getRowId(row, state.config.rowIdField);
+    if (rowId === null) {
+      return;
+    }
+
+    if (target.checked) {
+      selectRow(rowId);
+    } else {
+      deselectRow(rowId);
+    }
+  }
+
   container.addEventListener('click', onGroupToggleClick);
   container.addEventListener('keydown', onGroupToggleKeyDown);
+  container.addEventListener('click', onRowClick);
+  container.addEventListener('change', onSelectionCheckboxChange);
 
   function destroy(): void {
     if (headerEl) {
@@ -960,6 +1285,8 @@ export function createGrid(options: GridOptions): SmartGridAPI {
     onReorderMouseUp();
     container.removeEventListener('click', onGroupToggleClick);
     container.removeEventListener('keydown', onGroupToggleKeyDown);
+    container.removeEventListener('click', onRowClick);
+    container.removeEventListener('change', onSelectionCheckboxChange);
     hideDragIndicator();
     dragIndicatorEl.remove();
 
@@ -994,6 +1321,15 @@ export function createGrid(options: GridOptions): SmartGridAPI {
     setGrouping,
     clearGrouping,
     toggleGroup,
+    setTotals,
+    clearTotals,
+    setSelection,
+    selectRow,
+    deselectRow,
+    toggleRowSelection,
+    selectAll,
+    selectAllPages,
+    clearSelection,
     resizeColumn,
     reorderColumn,
     getState: store.getState,
@@ -1042,22 +1378,45 @@ function sameRowSequence(left: ReadonlyArray<Row>, right: ReadonlyArray<Row>): b
   return true;
 }
 
+function sameSetValues<T>(left: ReadonlySet<T>, right: ReadonlySet<T>): boolean {
+  if (left === right) {
+    return true;
+  }
+
+  if (left.size !== right.size) {
+    return false;
+  }
+
+  for (const value of left) {
+    if (!right.has(value)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 // --- Helper ---
 
 function buildVisibleSlice(
   processedData: ReadonlyArray<Row>,
   allColumns: ReadonlyArray<ColumnDef>,
+  selection: { selectedIds: ReadonlySet<RowId> },
+  rowIdField: string,
+  pageSelectableRowIds: ReadonlySet<RowId>,
+  allSelectableRowIds: ReadonlySet<RowId>,
+  selectionColumnId: string | null,
   range: ViewportRange,
   freeze: { leftCount: number; rightCount: number },
   availableWidth: number,
+  getRenderColumns: (columnsInput: ReadonlyArray<ColumnDef>) => ReadonlyArray<ColumnDef>,
   scroller: { getRowOffset: (i: number) => number; getColumnOffset: (i: number) => number },
 ): VisibleSlice {
-  const visibleColumns = resolveVisibleColumnsForWidth(
-    allColumns.filter((c) => c.visible !== false),
-    availableWidth,
-  );
+  const visibleColumns = resolveVisibleColumnsForWidth(getRenderColumns(allColumns), availableWidth);
   const allColumnWidths = visibleColumns.map((column) => column.width);
-  const clampedFreeze = clampFreezeCounts(visibleColumns.length, freeze.leftCount, freeze.rightCount);
+  const leftCountWithSelection =
+    selectionColumnId !== null ? Math.max(1, freeze.leftCount + 1) : freeze.leftCount;
+  const clampedFreeze = clampFreezeCounts(visibleColumns.length, leftCountWithSelection, freeze.rightCount);
 
   const columnIndexes = buildFrozenRenderColumnIndexes(
     visibleColumns.length,
@@ -1073,6 +1432,11 @@ function buildVisibleSlice(
   return {
     rows,
     columns,
+    rowIdField,
+    selectedRowIds: selection.selectedIds,
+    pageSelectableRowIds,
+    allSelectableRowIds,
+    selectionColumnId,
     columnIndexes,
     allColumnWidths,
     leftFrozenCount: clampedFreeze.leftCount,

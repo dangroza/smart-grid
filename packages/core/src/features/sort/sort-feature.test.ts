@@ -27,6 +27,7 @@ function createMockState(
     pagination: { page: 0, pageSize: 50, totalRows: 0 },
     freeze: { leftCount: 0, rightCount: 0 },
     grouping: { columnIds: [], collapsedKeys: new Set() },
+    totals: { mode: 'off', label: 'Totals' },
     config: {
       rowHeight: 40,
       headerHeight: 44,

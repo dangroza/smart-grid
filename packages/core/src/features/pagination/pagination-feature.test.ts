@@ -28,6 +28,7 @@ function createMockState(page: number, pageSize: number): GridState {
     pagination: { page, pageSize, totalRows: 0 },
     freeze: { leftCount: 0, rightCount: 0 },
     grouping: { columnIds: [], collapsedKeys: new Set() },
+    totals: { mode: 'off', label: 'Totals' },
     config: {
       rowHeight: 40,
       headerHeight: 44,

@@ -128,6 +128,17 @@ export interface GroupingState {
 }
 
 // -----------------------------------------------------------------------------
+// Totals
+// -----------------------------------------------------------------------------
+
+export type TotalsMode = 'off' | 'page' | 'allPages';
+
+export interface TotalsState {
+  readonly mode: TotalsMode;
+  readonly label: string;
+}
+
+// -----------------------------------------------------------------------------
 // Selection
 // -----------------------------------------------------------------------------
 
@@ -184,6 +195,7 @@ export interface GridState {
   readonly pagination: PaginationState;
   readonly freeze: FreezeState;
   readonly grouping: GroupingState;
+  readonly totals: TotalsState;
   readonly config: GridConfig;
 }
 
@@ -226,7 +238,7 @@ export interface GridEvents {
   'filter:changed': { criteria: ReadonlyArray<FilterCriterion> };
 
   // Selection events
-  'selection:changed': { selectedIds: ReadonlySet<RowId> };
+  'selection:changed': { selectedIds: ReadonlySet<RowId>; allSelected: boolean };
 
   // Pagination events
   'pagination:changed': { page: number; pageSize: number };
@@ -236,6 +248,9 @@ export interface GridEvents {
 
   // Grouping events
   'grouping:changed': { columnIds: ReadonlyArray<ColumnId>; collapsedKeys: ReadonlySet<string> };
+
+  // Totals events
+  'totals:changed': { mode: TotalsMode; label: string };
 
   // Column events
   'column:resized': { columnId: ColumnId; width: number };
@@ -309,6 +324,11 @@ export interface VirtualScroller {
 export interface VisibleSlice {
   readonly rows: ReadonlyArray<Row>;
   readonly columns: ReadonlyArray<ColumnDef>;
+  readonly rowIdField: string;
+  readonly selectedRowIds: ReadonlySet<RowId>;
+  readonly pageSelectableRowIds: ReadonlySet<RowId>;
+  readonly allSelectableRowIds: ReadonlySet<RowId>;
+  readonly selectionColumnId: ColumnId | null;
   readonly columnIndexes: ReadonlyArray<number>;
   readonly allColumnWidths: ReadonlyArray<number>;
   readonly leftFrozenCount: number;
@@ -366,6 +386,16 @@ export interface GridOptions {
     readonly rightCount?: number;
   };
   readonly initialGrouping?: ReadonlyArray<ColumnId>;
+  readonly selectionColumn?: {
+    readonly enabled?: boolean;
+    readonly id?: ColumnId;
+    readonly header?: string;
+    readonly width?: number;
+  };
+  readonly initialTotals?: {
+    readonly mode?: TotalsMode;
+    readonly label?: string;
+  };
   readonly height?: number | 'auto';
   readonly rowHeight?: number;
   readonly headerHeight?: number;
@@ -393,6 +423,15 @@ export interface SmartGridAPI {
   setGrouping(columnIds: ReadonlyArray<ColumnId>): void;
   clearGrouping(): void;
   toggleGroup(groupKey: string): void;
+  setTotals(mode: TotalsMode, label?: string): void;
+  clearTotals(): void;
+  setSelection(rowIds: ReadonlyArray<RowId>): void;
+  selectRow(rowId: RowId): void;
+  deselectRow(rowId: RowId): void;
+  toggleRowSelection(rowId: RowId): void;
+  selectAll(): void;
+  selectAllPages(): void;
+  clearSelection(): void;
   resizeColumn(columnId: ColumnId, width: number): void;
   reorderColumn(columnId: ColumnId, toVisibleIndex: number): void;
   getState(): GridState;

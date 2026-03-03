@@ -6,9 +6,9 @@
 - Phase 2 started: February 16, 2026
 - Phase 3 started: February 17, 2026
 
-**Current State:** Phase 3 — Implementation in progress (Stage 1 complete, Stage 2 started)
+**Current State:** Phase 3 — Implementation in progress (Stage 1 complete, Stage 2 mostly complete, Stage 3 partially started)
 
-**Last Updated:** February 17, 2026
+**Last Updated:** February 27, 2026
 
 ---
 
@@ -51,13 +51,15 @@
 6. **Build tool selection** — esbuild/Rollup/Vite for library output — needs evaluation — OPEN
 7. **Browser support matrix** — Modern only (ES2020+)? Needs decision — OPEN
 
-### Implementation Snapshot (February 17, 2026)
+### Implementation Snapshot (February 27, 2026)
 
 - Core architecture is implemented in code (`store`, `event-bus`, `pipeline`, `virtual-scroller`, `dom-renderer`, `grid` orchestrator).
 - CSS base/variables are implemented and integrated.
 - Example app renders 50K rows with virtualization (`examples/basic`).
-- Sort feature module is implemented and integrated into pipeline/grid.
-- Remaining Stage 2 features are not yet implemented (filter, pagination, resize/reorder, selection, etc.).
+- Stage 2 features implemented in code: sort, filter, pagination, resize, reorder, fixed/fill sizing, config/height controls.
+- Stage 3 features started early: freeze and grouping with expandable/collapsible group rows.
+- Highest-priority remaining Stage 2 gap: selection.
+- Remaining advanced/production backlog: row expansion, computed columns, totals, infinite scroll, full a11y/i18n, packaging/license CI.
 
 ---
 

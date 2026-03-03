@@ -26,6 +26,8 @@ export type {
   PaginationState,
   FreezeState,
   GroupingState,
+  TotalsMode,
+  TotalsState,
   SelectionState,
   ViewportState,
   ViewportRange,
@@ -77,4 +79,5 @@ export { buildFrozenRenderColumnIndexes, clampFreezeCounts } from './features/fr
 export { createFilterFeature, createFilterStep } from './features/filter/filter-feature';
 export { createGroupingFeature, createGroupingStep } from './features/grouping/grouping-feature';
 export { createPaginationFeature, createPaginationStep } from './features/pagination/pagination-feature';
+export { createTotalsFeature, createTotalsStep } from './features/totals/totals-feature';
 export { createSortFeature, createSortStep } from './features/sort/sort-feature';

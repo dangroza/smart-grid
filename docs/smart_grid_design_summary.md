@@ -1,7 +1,7 @@
 # Smart Grid — Design Summary
 
-**Date:** February 25, 2026  
-**Status:** Implementation In Progress — Stage 1 complete, Stage 2 substantially advanced  
+**Date:** February 27, 2026  
+**Status:** Implementation In Progress — Stage 1 complete, Stage 2 mostly complete, Stage 3 partially started  
 
 ---
 
@@ -46,13 +46,14 @@ Features (sort, filter, resize, etc.) are self-contained modules that plug into 
 | **3 — Advanced** | Freeze, Grouping, Row expansion, Computed columns, Totals, Infinite scroll | Complex features on solid foundation |
 | **4 — Production** | Full a11y, i18n, Config persistence, npm packaging, Docs, CI/CD | Publishable package |
 
-## Current Progress Snapshot (February 25, 2026)
+## Current Progress Snapshot (February 27, 2026)
 
 - **Stage 1 Foundation:** Implemented in `packages/core/src` (store, event bus, pipeline, virtual scroller, DOM renderer, grid orchestrator, CSS).
 - **Example app:** 50K × 50 demo in `examples/basic` with advanced side panel controls.
-- **Stage 2 implemented features:** sorting, filtering, pagination, column resize, column reorder, left/right freeze, fixed/fill column sizing, height mode (`auto`/`fixed`).
+- **Stage 2 implemented features:** sorting, filtering, pagination, column resize, column reorder, fixed/fill column sizing, height mode (`auto`/`fixed`).
+- **Stage 3 features already implemented early:** left/right freeze and grouping (including expandable/collapsible group rows).
 - **Tests:** Vitest suite passing (unit + integration coverage for core pipeline/features).
-- **Open:** selection, keyboard/a11y hardening depth, advanced stage features, packaging/license automation.
+- **Open (highest priority):** selection, keyboard/a11y hardening depth, column virtualization hardening, advanced stage remainder (row expansion/computed/totals/infinite scroll), packaging/license automation.
 
 ## Available Features & Configuration
 
@@ -66,6 +67,7 @@ Features (sort, filter, resize, etc.) are self-contained modules that plug into 
 	- `initialFilter`, `initialFilterMode`
 	- `initialPagination`
 	- `initialFreeze`
+	- `initialGrouping`
 - **Extensibility:** `features` (feature modules)
 
 ### Runtime API (`SmartGridAPI`)
@@ -73,6 +75,7 @@ Features (sort, filter, resize, etc.) are self-contained modules that plug into 
 - **Dataset/columns/config:** `setData`, `setColumns`, `setConfig`
 - **Sort/filter/pagination:** `setSort`/`clearSort`, `setFilter`/`clearFilter`, `setPagination`/`clearPagination`
 - **Freeze:** `setFrozenColumns`, `freezeLeftTo`, `freezeRightFrom`, `clearFreeze`
+- **Grouping:** `setGrouping`, `clearGrouping`, `toggleGroup`
 - **Columns:** `resizeColumn`, `reorderColumn`
 - **Navigation/lifecycle:** `scrollTo`, `destroy`
 
@@ -93,9 +96,20 @@ The example side panel exposes runtime controls for:
 - Height mode + fixed height
 - Column sizing (`width`, `fixedWidth`, `flexGrow`)
 - Freeze left/right boundaries
+- Grouping (primary/secondary + expand/collapse)
 - Sort criteria
 - Filter mode and criteria
 - Pagination page/page size
+
+## Remaining TODO (feature roadmap)
+
+1. **Selection feature (Stage 2)**
+2. **Column virtualization hardening + keyboard navigation depth (Stage 2/4 overlap)**
+3. **Row expansion (Stage 3)**
+4. **Computed columns (Stage 3)**
+5. **Global/page totals (Stage 3)**
+6. **Infinite scroll (Stage 3)**
+7. **Full a11y + i18n + config persistence + packaging/license CI (Stage 4)**
 
 ## Performance Targets
 
