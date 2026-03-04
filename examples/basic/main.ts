@@ -8,6 +8,7 @@ import '@smart-grid/core/css/smart-grid.css';
 import { mountPaginationFooter } from './footer';
 import { generateColumns, generateRows } from './mock-data';
 import { mountSmartSidePanel } from './sidepanel';
+import { createBenchmarkTracker } from '../shared/benchmark';
 
 const ROW_COUNT = 50_000;
 const COL_COUNT = 50;
@@ -23,6 +24,7 @@ const FOOTER_MODE = 'embedded' as const;
 
 const container = document.getElementById('grid-container');
 if (!container) throw new Error('Grid container not found');
+const benchmark = createBenchmarkTracker();
 
 // Measure data generation
 const t0 = performance.now();
@@ -68,6 +70,8 @@ setStats(
   `${ROW_COUNT.toLocaleString()} rows × ${COL_COUNT} columns | ` +
     `Data: ${(t1 - t0).toFixed(1)}ms | Grid: ${(t2 - t1).toFixed(1)}ms`,
 );
+benchmark.addSample('dataset:generate', t1 - t0);
+benchmark.addSample('grid:init', t2 - t1);
 
 // Keep stats synced with current state (after dynamic changes)
 const unsubStats = grid.getStore().subscribe((state) => {
@@ -96,6 +100,74 @@ const footerHost = document.getElementById('footer-host');
 const unmountFooter = footerHost
   ? mountPaginationFooter({ target: footerHost, grid, mode: FOOTER_MODE })
   : () => {};
+
+const benchSortBtn = document.getElementById('bench-sort') as HTMLButtonElement | null;
+const benchFilterBtn = document.getElementById('bench-filter') as HTMLButtonElement | null;
+const benchClearBtn = document.getElementById('bench-clear') as HTMLButtonElement | null;
+const benchRunAllBtn = document.getElementById('bench-run-all') as HTMLButtonElement | null;
+const benchFilterInput = document.getElementById('bench-filter-input') as HTMLInputElement | null;
+const benchResultsBody = document.getElementById('bench-results-body') as HTMLTableSectionElement | null;
+
+function renderBenchmarks(): void {
+  if (!benchResultsBody) {
+    return;
+  }
+
+  const summaries = benchmark.getSummaries();
+  benchResultsBody.innerHTML = '';
+
+  for (const summary of summaries) {
+    const row = document.createElement('tr');
+    row.innerHTML =
+      `<td>${summary.label}</td>` +
+      `<td>${summary.runs}</td>` +
+      `<td>${summary.lastMs.toFixed(1)}</td>` +
+      `<td>${summary.medianMs.toFixed(1)}</td>` +
+      `<td>${summary.p95Ms.toFixed(1)}</td>`;
+    benchResultsBody.appendChild(row);
+  }
+}
+
+async function runSortBenchmark(): Promise<void> {
+  await benchmark.measure('sort:salary-desc', async () => {
+    grid.setSort([{ columnId: 'salary', direction: 'desc' }]);
+  });
+  renderBenchmarks();
+}
+
+async function runFilterBenchmark(): Promise<void> {
+  const query = benchFilterInput?.value?.trim() || 'alice';
+  await benchmark.measure(`filter:firstName:${query}`, async () => {
+    grid.setFilter([{ columnId: 'firstName', operator: 'contains', value: query }]);
+  });
+  renderBenchmarks();
+}
+
+async function runClearFilterBenchmark(): Promise<void> {
+  await benchmark.measure('filter:clear', async () => {
+    grid.clearFilter();
+  });
+  renderBenchmarks();
+}
+
+benchSortBtn?.addEventListener('click', () => {
+  void runSortBenchmark();
+});
+benchFilterBtn?.addEventListener('click', () => {
+  void runFilterBenchmark();
+});
+benchClearBtn?.addEventListener('click', () => {
+  void runClearFilterBenchmark();
+});
+benchRunAllBtn?.addEventListener('click', () => {
+  void (async () => {
+    await runSortBenchmark();
+    await runFilterBenchmark();
+    await runClearFilterBenchmark();
+  })();
+});
+
+renderBenchmarks();
 
 // Expose for debugging
 (window as unknown as Record<string, unknown>)['smartGrid'] = grid;

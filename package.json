@@ -17,6 +17,9 @@
     "dev:basic": "npm run dev -w @smart-grid/example-basic",
     "build:basic": "npm run build -w @smart-grid/example-basic",
     "preview:basic": "npm run preview -w @smart-grid/example-basic",
+    "dev:aggrid": "npm run dev -w @smart-grid/example-aggrid-vue3",
+    "build:aggrid": "npm run build -w @smart-grid/example-aggrid-vue3",
+    "preview:aggrid": "npm run preview -w @smart-grid/example-aggrid-vue3",
     "license-check": "echo 'TODO: Add license-checker when dependencies exist'"
   },
   "devDependencies": {

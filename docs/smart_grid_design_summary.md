@@ -118,6 +118,19 @@ The example side panel exposes runtime controls for:
 - **< 500 DOM nodes** in viewport at any time
 - **< 100ms** for frontend sort/filter on 50K rows
 
+## Benchmark Comparison Example
+
+An AG Grid Community + Vue 3 comparison app is available at:
+
+- [examples/aggrid-vue3](examples/aggrid-vue3)
+
+Run commands:
+
+- `npm run dev:basic` (Smart Grid baseline)
+- `npm run dev:aggrid` (AG Grid Vue benchmark)
+
+The AG Grid example includes quick benchmark controls (sort/filter/clear) and timing logs to support side-by-side manual comparison.
+
 ---
 
 *Full specification: `smart_grid_design.md`*  

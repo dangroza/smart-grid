@@ -301,12 +301,70 @@
       z-index: 999;
       box-shadow: 0 8px 24px rgba(15, 23, 42, 0.15);
     }
+
+    .benchmark-bar {
+      padding: 10px 16px;
+      border-bottom: 1px solid #e7ebed;
+      background: #fafbfd;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .benchmark-bar input,
+    .benchmark-bar button {
+      height: 30px;
+      font-size: 12px;
+      border: 1px solid #d8e0e5;
+      border-radius: 4px;
+      background: #fff;
+      padding: 0 8px;
+    }
+
+    .benchmark-bar button {
+      cursor: pointer;
+    }
+
+    .benchmark-table {
+      width: 100%;
+      margin-top: 6px;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .benchmark-table th,
+    .benchmark-table td {
+      border-top: 1px solid #edf2f5;
+      padding: 5px 6px;
+      text-align: left;
+      color: #334155;
+    }
   </style>
 </head>
 <body>
   <div class="toolbar">
     <h1>Smart Grid Demo</h1>
     <span class="stats" id="stats">Loading...</span>
+  </div>
+  <div class="benchmark-bar" id="benchmark-bar">
+    <button id="bench-sort" type="button">Benchmark sort</button>
+    <input id="bench-filter-input" type="text" value="alice" aria-label="Benchmark filter text" />
+    <button id="bench-filter" type="button">Benchmark filter</button>
+    <button id="bench-clear" type="button">Benchmark clear filter</button>
+    <button id="bench-run-all" type="button">Run all</button>
+    <table class="benchmark-table" aria-label="Benchmark summary">
+      <thead>
+        <tr>
+          <th>Scenario</th>
+          <th>Runs</th>
+          <th>Last (ms)</th>
+          <th>Median (ms)</th>
+          <th>P95 (ms)</th>
+        </tr>
+      </thead>
+      <tbody id="bench-results-body"></tbody>
+    </table>
   </div>
   <div class="layout">
     <div class="grid-shell">
